@@ -84,7 +84,7 @@ export default function ProfilePage() {
               onClick={() => setActiveTab(label)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all ${activeTab === label ? "text-white" : "text-icebreaker-muted"}`}
               style={activeTab === label
-                ? { background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 16px rgba(255,27,141,0.4)" }
+                ? { background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 16px rgba(255,27,141,0.4)" }
                 : { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
               data-testid={`tab-${label.toLowerCase()}`}
             >

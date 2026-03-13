@@ -33,13 +33,17 @@ export default function OnboardingPage() {
     }
     try {
       const token = localStorage.getItem("token");
+      const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
       const res = await fetch("/api/user/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...form, gender, interests })
+        method: "PUT", headers,
+        body: JSON.stringify({ ...form, gender })
+      });
+      await fetch("/api/user/preferences", {
+        method: "PUT", headers,
+        body: JSON.stringify({ interests: { hobbies: interests, meetWho } })
       });
       if (res.ok) {
-        toast({ title: "Profile saved! +50 XP +10 Cubes 🎉" });
+        toast({ title: "Profile saved! +50 XP +10 Cubes" });
         navigate("/");
       } else {
         const err = await res.json();
@@ -55,19 +59,24 @@ export default function OnboardingPage() {
     else save();
   };
 
-  const GenderBtn = ({ label, emoji }: { label: string; emoji: string }) => (
-    <button
-      onClick={() => setGender(label.toLowerCase())}
-      className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl text-sm font-bold transition-all`}
-      style={gender === label.toLowerCase()
-        ? { background: "rgba(255,27,141,0.2)", border: "2px solid #FF1B8D", color: "#FF1B8D" }
-        : { background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)", color: "#F0F2F7" }}
-      data-testid={`gender-${label.toLowerCase()}`}
-    >
-      <span className="text-2xl">{emoji}</span>
-      {label}
-    </button>
-  );
+  const GENDER_MAP: Record<string, string> = { "Woman": "female", "Man": "male", "Non-binary": "non_binary" };
+
+  const GenderBtn = ({ label, emoji }: { label: string; emoji: string }) => {
+    const val = GENDER_MAP[label] || label.toLowerCase();
+    return (
+      <button
+        onClick={() => setGender(val)}
+        className={`flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl text-sm font-bold transition-all`}
+        style={gender === val
+          ? { background: "rgba(255,27,141,0.2)", border: "2px solid #FF1B8D", color: "#FF1B8D" }
+          : { background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)", color: "#F0F2F7" }}
+        data-testid={`gender-${label.toLowerCase()}`}
+      >
+        <span className="text-2xl">{emoji}</span>
+        {label}
+      </button>
+    );
+  };
 
   const MeetBtn = ({ label }: { label: string }) => (
     <button
@@ -142,7 +151,7 @@ export default function OnboardingPage() {
               <button
                 onClick={() => setGender("other")}
                 className="w-full mt-2 py-3 rounded-2xl text-sm font-semibold text-icebreaker-muted transition-all"
-                style={gender === "other" ? { background: "rgba(255,27,141,0.15)", border: "1.5px solid #FF1B8D", color: "#FF1B8D" } : { background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)" }}
+                style={gender === "other" ? { background: "rgba(255,27,141,0.15)", border: "2px solid #FF1B8D", color: "#FF1B8D" } : { background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(255,255,255,0.1)" }}
                 data-testid="gender-self-describe"
               >
                 ✏️ Self-describe
@@ -236,7 +245,7 @@ export default function OnboardingPage() {
         <button
           onClick={next}
           className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-95"
-          style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
+          style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
           data-testid="button-continue"
         >
           {step < 2 ? "Continue →" : "Finish & Enter ✨"}

@@ -101,7 +101,7 @@ export default function HomePage() {
           <h2 className="text-xl font-extrabold mb-1">Go out tonight</h2>
           <p className="text-sm text-icebreaker-muted mb-4">Find the vibe, check who's there, and meet IRL.</p>
           <Link href="/venues">
-            <button className="flex items-center gap-2 h-11 px-5 rounded-2xl font-bold text-sm text-white w-full justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 24px rgba(255,27,141,0.4)" }} data-testid="button-explore-venues">
+            <button className="flex items-center gap-2 h-11 px-5 rounded-2xl font-bold text-sm text-white w-full justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 24px rgba(255,27,141,0.4)" }} data-testid="button-explore-venues">
               <MapPin className="w-4 h-4" />
               Explore venues & check in
             </button>

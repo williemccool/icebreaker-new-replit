@@ -71,9 +71,51 @@ Font: Plus Jakarta Sans (800 headings, 400/600 body)
 
 users, preferences, venues, checkIns, rooms, swipes, matches, messages, events, tickets, seasons, quests, userQuests, cubeTransactions, wallets, leaderboards, subscriptions, boosts, reports, dateBookings, drinkGifts, crews, crewMembers, otpVerifications, badges, userBadges
 
+## API Endpoints
+
+### Auth
+- `POST /api/auth/send-otp` — Send OTP (logged to console in dev)
+- `POST /api/auth/verify-otp` — Verify OTP, returns JWT token
+
+### User
+- `GET /api/user/me` — Current user + wallet + preferences
+- `PUT /api/user/profile` — Update profile (gender enum: male/female/non_binary/other)
+- `PUT /api/user/preferences` — Update preferences
+- `GET /api/users/:id` — Public user profile (safe subset, no DOB)
+
+### Social
+- `GET /api/wallet` — Cubes wallet balance
+- `GET /api/matches` — All matches with otherUser
+- `GET /api/matches/:id` — Single match (auth-checked: must be participant)
+- `GET /api/matches/:id/messages` — Messages for match
+- `POST /api/matches/:id/messages` — Send message (field: `body`)
+- `POST /api/swipe` — Swipe action (auto-match on mutual like)
+- `GET /api/discover/swipe` — Swipeable profiles
+
+### Venues & Rooms
+- `GET /api/venues` — All venues
+- `GET /api/venues/:id` — Venue detail + active users
+- `POST /api/venues/:id/check-in` — Check in to venue
+- `GET /api/rooms` — Active rooms
+- `GET /api/rooms/:id` — Room with participants
+
+### Events & Gamification
+- `GET /api/events` — Events (filterable by city)
+- `POST /api/events/:id/purchase` — Purchase ticket with Cubes
+- `GET /api/quests` — Available quests
+- `GET /api/leaderboard` — Season leaderboard
+- `GET /api/season/current` — Current season info
+
+### Social Features
+- `POST /api/gifts/send` — Gift a drink (uses Cubes)
+- `GET /api/crews/my` — My crews
+- `POST /api/crews` — Create a crew
+
 ## Important Notes
 
 - **No admin dashboard** — customer-facing only
 - **No Razorpay** — payment screens are simulated
 - Seed data: `npm run seed`
 - Dev OTP: logged to console
+- Gender enum values: `male`, `female`, `non_binary`, `other`
+- Message field name: `body` (not `text` or `content`)

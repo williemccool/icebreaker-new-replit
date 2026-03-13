@@ -124,7 +124,7 @@ export default function VenueDetailPage() {
                   <Link key={user.id} href={`/gift/${user.id}`}>
                     <div className="flex flex-col items-center gap-1.5 cursor-pointer" data-testid={`checked-in-user-${user.id}`}>
                       <div className="relative">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg text-white" style={{ background: i === 0 ? "linear-gradient(135deg, #FF1B8D, #c4006e)" : "linear-gradient(135deg, #00CFFF, #0080aa)", border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }}>
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg text-white" style={{ background: i === 0 ? "linear-gradient(135deg, #FF1B8D, #d6007a)" : "linear-gradient(135deg, #00CFFF, #009ecf)", border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }}>
                           {user.name?.[0] || "U"}
                         </div>
                         <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-400 border-2 border-icebreaker-bg" />
@@ -259,7 +259,7 @@ export default function VenueDetailPage() {
             onClick={doCheckIn}
             disabled={checkingIn}
             className="flex-1 h-11 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
-            style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 20px rgba(255,27,141,0.4)" }}
+            style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 20px rgba(255,27,141,0.4)" }}
             data-testid="button-checkin"
           >
             {checkingIn ? "…" : "✓ Check In"}
@@ -337,7 +337,7 @@ export default function VenueDetailPage() {
             <p className="font-extrabold text-sm">Unlock Tonight</p>
             <p className="text-xs text-icebreaker-muted">Check in to access exclusive perks & meet people here</p>
           </div>
-          <button onClick={doCheckIn} disabled={checkingIn} className="px-4 py-2 rounded-xl font-bold text-sm text-white" style={{ background: "linear-gradient(135deg, #FF1B8D, #c4006e)" }} data-testid="button-unlock">
+          <button onClick={doCheckIn} disabled={checkingIn} className="px-4 py-2 rounded-xl font-bold text-sm text-white" style={{ background: "linear-gradient(135deg, #FF1B8D, #d6007a)" }} data-testid="button-unlock">
             {checkingIn ? "…" : "Check In"}
           </button>
         </div>

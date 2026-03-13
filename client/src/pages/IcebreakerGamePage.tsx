@@ -71,7 +71,7 @@ export default function IcebreakerGamePage() {
       {/* Match info */}
       <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-white" style={{ background: "linear-gradient(135deg, #00CFFF, #0080aa)" }}>
+          <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-white" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)" }}>
             M
           </div>
           <div>
@@ -98,7 +98,7 @@ export default function IcebreakerGamePage() {
       <div className="px-5 mb-5">
         <p className="text-xs text-icebreaker-muted font-semibold mb-2">Marcus</p>
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF, #0080aa)" }}>M</div>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)" }}>M</div>
           <div className="max-w-xs px-4 py-3 rounded-2xl rounded-tl-sm" style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}>
             <p className="text-sm font-semibold leading-snug">{currentRound.prompt}</p>
           </div>
@@ -142,7 +142,7 @@ export default function IcebreakerGamePage() {
             onClick={handleSend}
             disabled={chosen === null}
             className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 disabled:opacity-30"
-            style={{ background: chosen !== null ? "linear-gradient(135deg, #FF1B8D, #c4006e)" : "rgba(255,255,255,0.1)" }}
+            style={{ background: chosen !== null ? "linear-gradient(135deg, #FF1B8D, #d6007a)" : "rgba(255,255,255,0.1)" }}
             data-testid="button-send-response"
           >
             {sent ? <ChevronRight className="w-4 h-4 text-white" /> : <Send className="w-4 h-4 text-white" />}

@@ -58,7 +58,7 @@ function BottomNav() {
             <Link key={href} href={href}>
               <div className={`bottom-nav-item ${isActive ? "active" : ""}`} data-testid={`nav-${label.toLowerCase()}`}>
                 {isActive && href === "/rooms" ? (
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D, #c4006e)", boxShadow: "0 0 16px rgba(255,27,141,0.5)" }}>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D, #d6007a)", boxShadow: "0 0 16px rgba(255,27,141,0.5)" }}>
                     <Icon className="w-5 h-5 text-white" strokeWidth={2.5} />
                   </div>
                 ) : (
