@@ -13,12 +13,12 @@
     --popover-foreground: 220 20% 95%;
     --primary: 327 100% 55%;         /* Electric Pink #FF1B8D */
     --primary-foreground: 0 0% 100%;
-    --secondary: 272 91% 65%;        /* Orchid #A855F7 */
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 195 100% 50%;       /* Electric Cyan #00CFFF */
+    --secondary-foreground: 0 0% 5%;
     --muted: 240 12% 18%;
     --muted-foreground: 224 12% 55%; /* #8A8FA8 */
     --accent: 195 100% 50%;          /* Electric Cyan #00CFFF */
-    --accent-foreground: 0 0% 100%;
+    --accent-foreground: 0 0% 5%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
     --border: 240 14% 17%;           /* #252530 */
@@ -27,10 +27,7 @@
     --radius: 0.875rem;
   }
 
-  /* Force dark mode on everything */
-  html {
-    color-scheme: dark;
-  }
+  html { color-scheme: dark; }
 
   * {
     @apply border-border;
@@ -54,7 +51,6 @@
     color: #F0F2F7;
   }
 
-  /* ─── Scrollbar ───────────────────────────────────────── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: #0A0A0C; }
   ::-webkit-scrollbar-thumb { background: #252530; border-radius: 99px; }
@@ -72,15 +68,8 @@
     letter-spacing: -0.01em;
   }
 
-  .btn-orchid {
-    @apply bg-icebreaker-orchid hover:bg-icebreaker-orchid/90 text-white font-bold
-           py-2.5 px-6 rounded-xl transition-all duration-200
-           shadow-glow-orchid active:scale-95;
-    font-family: 'Plus Jakarta Sans', sans-serif;
-  }
-
   .btn-teal {
-    @apply bg-icebreaker-teal hover:bg-icebreaker-teal/90 text-white font-bold
+    @apply bg-icebreaker-teal hover:bg-icebreaker-teal/90 font-bold
            py-2.5 px-6 rounded-xl transition-all duration-200
            shadow-glow-teal active:scale-95;
     font-family: 'Plus Jakarta Sans', sans-serif;
@@ -113,20 +102,6 @@
   }
 
   /* ─── Gradient Text ────────────────────────────────────── */
-  .text-gradient-coral-orchid {
-    background: linear-gradient(135deg, #FF1B8D 0%, #A855F7 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .text-gradient-orchid-teal {
-    background: linear-gradient(135deg, #A855F7 0%, #00CFFF 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
   .text-gradient-pink-cyan {
     background: linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%);
     -webkit-background-clip: text;
@@ -137,32 +112,28 @@
   /* ─── Icon Badges ───────────────────────────────────────── */
   .icon-badge-coral {
     @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
-    background: linear-gradient(135deg, rgba(255,27,141,0.3) 0%, rgba(255,27,141,0.1) 100%);
+    background: linear-gradient(135deg, rgba(255,27,141,0.25) 0%, rgba(255,27,141,0.08) 100%);
     border: 1px solid rgba(255,27,141,0.3);
-  }
-
-  .icon-badge-orchid {
-    @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
-    background: linear-gradient(135deg, rgba(168,85,247,0.3) 0%, rgba(168,85,247,0.1) 100%);
-    border: 1px solid rgba(168,85,247,0.3);
   }
 
   .icon-badge-teal {
     @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
-    background: linear-gradient(135deg, rgba(0,207,255,0.3) 0%, rgba(0,207,255,0.1) 100%);
+    background: linear-gradient(135deg, rgba(0,207,255,0.25) 0%, rgba(0,207,255,0.08) 100%);
     border: 1px solid rgba(0,207,255,0.3);
   }
 
-  /* ─── Number Badge ─────────────────────────────────────── */
+  /* ─── Number Badges ─────────────────────────────────────── */
   .num-badge-coral {
     @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0;
     background: #FF1B8D;
+    box-shadow: 0 0 8px rgba(255,27,141,0.5);
   }
 
   .num-badge-teal {
     @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0;
     background: #00CFFF;
     color: #0A0A0C;
+    box-shadow: 0 0 8px rgba(0,207,255,0.5);
   }
 
   /* ─── Tags / Pills ─────────────────────────────────────── */
@@ -180,10 +151,6 @@
 
   .pill-coral {
     @apply pill bg-icebreaker-coral/15 border-icebreaker-coral/30 text-icebreaker-coral;
-  }
-
-  .pill-orchid {
-    @apply pill bg-icebreaker-orchid/15 border-icebreaker-orchid/30 text-icebreaker-orchid;
   }
 
   .pill-teal {
@@ -256,7 +223,7 @@
   }
 
   [role="progressbar"] > div {
-    background: linear-gradient(90deg, #FF1B8D 0%, #A855F7 100%) !important;
+    background: linear-gradient(90deg, #FF1B8D 0%, #00CFFF 100%) !important;
   }
 
   /* ─── Sticky header ────────────────────────────────────── */
@@ -280,7 +247,6 @@
   color: #F0F2F7 !important;
 }
 
-/* Select dropdown dark */
 [data-radix-popper-content-wrapper] > div {
   background: #1E1E25 !important;
   border: 1px solid #252530 !important;
@@ -297,7 +263,6 @@
   color: #FF1B8D !important;
 }
 
-/* Toast dark */
 [data-sonner-toast], [data-state] {
   font-family: 'Plus Jakarta Sans', sans-serif !important;
 }

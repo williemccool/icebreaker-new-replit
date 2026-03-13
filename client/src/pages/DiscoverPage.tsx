@@ -49,7 +49,7 @@ export default function DiscoverPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-coral-orchid animate-pulse" />
+          <div className="w-10 h-10 rounded-2xl bg-gradient-pink-cyan animate-pulse" />
           <span className="text-icebreaker-muted text-sm font-semibold">Finding people nearby...</span>
         </div>
       </div>
@@ -60,7 +60,7 @@ export default function DiscoverPage() {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="flex flex-col items-center gap-5 text-center max-w-xs">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.15) 0%, rgba(168,85,247,0.15) 100%)" }}>
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.15) 0%, rgba(0,207,255,0.15) 100%)" }}>
             <Heart className="w-10 h-10 text-icebreaker-coral" />
           </div>
           <div>
@@ -100,7 +100,7 @@ export default function DiscoverPage() {
             ) : (
               <div
                 className="absolute inset-0"
-                style={{ background: `linear-gradient(160deg, #FF5A5F 0%, #A855F7 50%, #14C8A0 100%)` }}
+                style={{ background: `linear-gradient(160deg, #FF1B8D 0%, #00CFFF 100%)` }}
               >
                 <div className="absolute inset-0 flex items-center justify-center">
                   <span className="text-9xl font-extrabold text-white/30">
@@ -159,17 +159,17 @@ export default function DiscoverPage() {
               onClick={() => swipeMutation.mutate({ swipedId: currentUser.id, liked: true })}
               disabled={swipeMutation.isPending}
               className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-glow-coral"
-              style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }}
+              style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }}
               data-testid="button-swipe-right"
             >
               <Heart className="w-7 h-7 text-white fill-white" />
             </button>
 
             <button
-              className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-90 border-2 border-icebreaker-orchid/40 hover:border-icebreaker-orchid hover:bg-icebreaker-orchid/10"
+              className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-90 border-2 border-icebreaker-teal/40 hover:border-icebreaker-teal hover:bg-icebreaker-teal/10"
               data-testid="button-superlike"
             >
-              <Sparkles className="w-6 h-6 text-icebreaker-orchid" />
+              <Sparkles className="w-6 h-6 text-icebreaker-teal" />
             </button>
           </div>
         </div>

@@ -69,7 +69,7 @@ function App() {
     return (
       <div className="min-h-screen bg-icebreaker-bg flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-coral-orchid animate-pulse" />
+          <div className="w-10 h-10 rounded-2xl bg-gradient-pink-cyan animate-pulse" />
           <span className="text-icebreaker-muted text-sm font-semibold">Loading...</span>
         </div>
       </div>

@@ -42,7 +42,7 @@ export default function ProfilePage() {
         <div className="card-dark text-center py-6">
           <div
             className="w-20 h-20 mx-auto rounded-full flex items-center justify-center text-3xl font-extrabold text-white mb-3"
-            style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }}
+            style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }}
             data-testid="avatar-profile"
           >
             {user.name?.[0] || "U"}
@@ -61,7 +61,7 @@ export default function ProfilePage() {
         <div className="grid grid-cols-3 gap-3">
           {[
             { value: user.level || 1, label: "Level", color: "text-icebreaker-coral" },
-            { value: user.xp || 0, label: "XP", color: "text-icebreaker-orchid" },
+            { value: user.xp || 0, label: "XP", color: "text-icebreaker-teal" },
             { value: balance, label: "Cubes", color: "text-icebreaker-teal" },
           ].map(({ value, label, color }) => (
             <div key={label} className="card-dark text-center py-3" data-testid={`stat-${label.toLowerCase()}`}>

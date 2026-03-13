@@ -54,7 +54,7 @@ export default function LeaderboardPage() {
                 {/* Avatar */}
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0"
-                  style={{ background: "linear-gradient(135deg, #A855F7 0%, #FF5A5F 100%)" }}
+                  style={{ background: "linear-gradient(135deg, #00CFFF 0%, #FF1B8D 100%)" }}
                 >
                   {entry.user.name?.[0] || "?"}
                 </div>

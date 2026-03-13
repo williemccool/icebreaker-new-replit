@@ -49,11 +49,11 @@ export default function HomePage() {
       <div className="page-header">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }}>
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }}>
               <Flame className="w-4 h-4 text-white" />
             </div>
             <h1 className="text-xl font-extrabold tracking-tight">
-              <span className="text-icebreaker-coral">Ice</span><span className="text-icebreaker-orchid">breaker</span>
+              <span className="text-icebreaker-coral">Ice</span><span className="text-icebreaker-teal">breaker</span>
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -65,7 +65,7 @@ export default function HomePage() {
               </div>
             </Link>
             <Link href="/profile">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white cursor-pointer" style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }} data-testid="avatar-header">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white cursor-pointer" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }} data-testid="avatar-header">
                 {user?.name?.[0] || "U"}
               </div>
             </Link>
@@ -104,8 +104,8 @@ export default function HomePage() {
           </Link>
           <Link href="/discover">
             <div className="card-dark cursor-pointer hover:border-icebreaker-coral/50 transition-all group" data-testid="quick-action-discover">
-              <div className="icon-badge-orchid mb-3">
-                <Zap className="w-5 h-5 text-icebreaker-orchid" />
+              <div className="icon-badge-teal mb-3">
+                <Zap className="w-5 h-5 text-icebreaker-teal" />
               </div>
               <h3 className="font-bold text-sm">Discover</h3>
               <p className="text-xs text-icebreaker-muted mt-0.5">Swipe & match</p>
@@ -215,7 +215,7 @@ export default function HomePage() {
               {hotVenues.map((venue: any) => (
                 <Link key={venue.id} href={`/venues/${venue.id}`}>
                   <div className="card-dark hover:border-icebreaker-coral/40 transition-all cursor-pointer flex items-center gap-3 py-3" data-testid={`venue-card-${venue.id}`}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.2) 0%, rgba(168,85,247,0.2) 100%)" }}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.2) 0%, rgba(0,207,255,0.2) 100%)" }}>
                       <MapPin className="w-5 h-5 text-icebreaker-coral" />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -266,7 +266,7 @@ export default function HomePage() {
 
         {/* Leaderboard CTA */}
         <Link href="/leaderboard">
-          <div className="cursor-pointer rounded-2xl p-4 flex items-center gap-3" style={{ background: "linear-gradient(135deg, rgba(255,176,32,0.1) 0%, rgba(255,90,95,0.08) 100%)", border: "1px solid rgba(255,176,32,0.2)" }} data-testid="leaderboard-cta">
+          <div className="cursor-pointer rounded-2xl p-4 flex items-center gap-3" style={{ background: "linear-gradient(135deg, rgba(255,176,32,0.1) 0%, rgba(255,27,141,0.08) 100%)", border: "1px solid rgba(255,176,32,0.2)" }} data-testid="leaderboard-cta">
             <Trophy className="w-8 h-8 text-yellow-400 flex-shrink-0" />
             <div>
               <p className="font-extrabold text-sm">Season Leaderboard</p>

@@ -72,7 +72,7 @@ export default function EventsPage() {
                   <span>{new Date(event.startsAt).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-icebreaker-muted">
-                  <Clock className="w-3.5 h-3.5 text-icebreaker-orchid flex-shrink-0" />
+                  <Clock className="w-3.5 h-3.5 text-icebreaker-teal flex-shrink-0" />
                   <span>{new Date(event.startsAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-icebreaker-muted">

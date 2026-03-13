@@ -52,7 +52,7 @@ export default function VenueDetailPage() {
         {venue?.imageUrl ? (
           <img src={venue.imageUrl} alt={venue.name} className="w-full h-56 object-cover" />
         ) : (
-          <div className="w-full h-56" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.3) 0%, rgba(168,85,247,0.3) 100%)" }} />
+          <div className="w-full h-56" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.3) 0%, rgba(0,207,255,0.3) 100%)" }} />
         )}
         <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, rgba(14,15,19,1) 100%)" }} />
         <Link href="/venues">
@@ -114,14 +114,14 @@ export default function VenueDetailPage() {
         {/* Who's here */}
         <div className="card-dark">
           <div className="flex items-center gap-2 mb-3">
-            <Users className="w-4 h-4 text-icebreaker-orchid" />
+            <Users className="w-4 h-4 text-icebreaker-teal" />
             <h2 className="font-extrabold text-sm tracking-tight">Who's Here</h2>
           </div>
           {checkedInUsers && checkedInUsers.length > 0 ? (
             <div className="grid grid-cols-2 gap-2">
               {checkedInUsers.map(({ user }: any) => (
                 <div key={user.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-icebreaker-elevated" data-testid={`checked-in-user-${user.id}`}>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #A855F7 0%, #FF5A5F 100%)" }}>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF 0%, #FF1B8D 100%)" }}>
                     {user.name?.[0] || "U"}
                   </div>
                   <div className="min-w-0">

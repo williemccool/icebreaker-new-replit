@@ -20,7 +20,7 @@ export default {
           text: '#F0F2F7',
           muted: '#8A8FA8',
           coral: '#FF1B8D',
-          orchid: '#A855F7',
+          orchid: '#00CFFF',
           teal: '#00CFFF',
           warning: '#FFB020',
           border: '#252530',

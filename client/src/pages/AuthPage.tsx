@@ -73,18 +73,18 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
 
       {/* Background glow */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #FF5A5F 0%, transparent 70%)" }} />
-        <div className="absolute bottom-1/3 left-1/4 w-72 h-72 rounded-full opacity-8" style={{ background: "radial-gradient(circle, #A855F7 0%, transparent 70%)" }} />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #FF1B8D 0%, transparent 70%)" }} />
+        <div className="absolute bottom-1/3 left-1/4 w-72 h-72 rounded-full opacity-8" style={{ background: "radial-gradient(circle, #00CFFF 0%, transparent 70%)" }} />
       </div>
 
       <div className="w-full max-w-sm relative z-10">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5" style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }}>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }}>
             <Flame className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight mb-1">
-            <span className="text-icebreaker-coral">Ice</span><span className="text-icebreaker-orchid">breaker</span>
+            <span className="text-icebreaker-coral">Ice</span><span className="text-icebreaker-teal">breaker</span>
           </h1>
           <p className="text-icebreaker-muted text-sm font-medium">Bangalore's nightlife dating app</p>
         </div>
