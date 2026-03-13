@@ -58,7 +58,7 @@ export default function ChatPage() {
               <ArrowLeft className="w-4 h-4 text-icebreaker-muted" />
             </button>
           </Link>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #A855F7 0%, #FF5A5F 100%)" }}>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF 0%, #FF1B8D 100%)" }}>
             M
           </div>
           <div className="flex-1 min-w-0">
@@ -75,7 +75,7 @@ export default function ChatPage() {
       <div className="flex-1 overflow-y-auto p-4 pb-2 max-w-lg mx-auto w-full">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-4 opacity-60">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.15) 0%, rgba(168,85,247,0.15) 100%)" }}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.15) 0%, rgba(0,207,255,0.15) 100%)" }}>
               <Sparkles className="w-7 h-7 text-icebreaker-coral" />
             </div>
             <div className="text-center">
@@ -95,7 +95,7 @@ export default function ChatPage() {
                       ? "text-white rounded-br-md"
                       : "bg-icebreaker-surface text-icebreaker-text rounded-bl-md"
                   }`}
-                  style={isMine ? { background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" } : undefined}
+                  style={isMine ? { background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" } : undefined}
                 >
                   <p>{msg.body}</p>
                   <p className="text-xs opacity-60 mt-1 text-right">

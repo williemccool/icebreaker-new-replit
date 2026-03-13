@@ -48,7 +48,7 @@ export default function RoomsPage() {
                     </div>
                   </div>
                   {room.premium && (
-                    <div className="flex items-center gap-1 pill-orchid">
+                    <div className="flex items-center gap-1 pill-teal">
                       <Crown className="w-3 h-3" />
                       <span>Premium</span>
                     </div>
@@ -69,7 +69,7 @@ export default function RoomsPage() {
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${pct}%`,
-                        background: isFull ? "#FF1B8D" : "linear-gradient(90deg, #00CFFF 0%, #A855F7 100%)"
+                        background: isFull ? "#FF1B8D" : "linear-gradient(90deg, #FF1B8D 0%, #00CFFF 100%)"
                       }}
                     />
                   </div>

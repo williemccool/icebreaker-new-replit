@@ -42,7 +42,7 @@ export default function QuestsPage() {
                 className="h-full rounded-full transition-all"
                 style={{
                   width: `${(completedCount / totalCount) * 100}%`,
-                  background: "linear-gradient(90deg, #FF5A5F 0%, #A855F7 100%)"
+                  background: "linear-gradient(90deg, #FF1B8D 0%, #00CFFF 100%)"
                 }}
               />
             </div>
@@ -95,8 +95,8 @@ export default function QuestsPage() {
                       style={{
                         width: `${pct}%`,
                         background: isComplete
-                          ? "#14C8A0"
-                          : "linear-gradient(90deg, #FF5A5F 0%, #A855F7 100%)"
+                          ? "#00CFFF"
+                          : "linear-gradient(90deg, #FF1B8D 0%, #00CFFF 100%)"
                       }}
                     />
                   </div>

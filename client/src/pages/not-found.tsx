@@ -5,7 +5,7 @@ export default function NotFoundPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-icebreaker-bg">
       <div className="text-center max-w-xs">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.2) 0%, rgba(168,85,247,0.2) 100%)", border: "1px solid rgba(255,90,95,0.3)" }}>
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.2) 0%, rgba(0,207,255,0.2) 100%)", border: "1px solid rgba(255,27,141,0.3)" }}>
           <Flame className="w-8 h-8 text-icebreaker-coral" />
         </div>
         <h1 className="text-5xl font-extrabold text-icebreaker-coral mb-2">404</h1>
