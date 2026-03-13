@@ -582,6 +582,13 @@ import type { Express } from "express";
       try {
         const matchId = parseInt(req.params.id);
         
+        const [match] = await db.select().from(matches)
+          .where(eq(matches.id, matchId))
+          .limit(1);
+        if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+        
         const msgs = await db.select().from(messages)
           .where(eq(messages.matchId, matchId))
           .orderBy(messages.createdAt);
@@ -596,6 +603,14 @@ import type { Express } from "express";
     app.post("/api/matches/:id/messages", authMiddleware, async (req: any, res) => {
       try {
         const matchId = parseInt(req.params.id);
+        
+        const [match] = await db.select().from(matches)
+          .where(eq(matches.id, matchId))
+          .limit(1);
+        if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+        
         const { body } = req.body;
         
         const [message] = await db.insert(messages).values({
