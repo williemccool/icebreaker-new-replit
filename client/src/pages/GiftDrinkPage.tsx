@@ -77,9 +77,13 @@ export default function GiftDrinkPage() {
         {/* Recipient */}
         <div className="flex flex-col items-center pt-4 pb-2">
           <div className="relative mb-3">
-            <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-extrabold text-white" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
-              {recipient?.name?.[0] || "?"}
-            </div>
+            {(recipient?.photos as string[])?.[0] ? (
+              <img src={(recipient.photos as string[])[0]} alt={recipient?.name || ""} className="w-20 h-20 rounded-full object-cover" style={{ border: "3px solid rgba(255,27,141,0.5)" }} />
+            ) : (
+              <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-extrabold text-white" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
+                {recipient?.name?.[0] || "?"}
+              </div>
+            )}
             <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-green-400 border-2 border-icebreaker-bg" />
           </div>
           <h2 className="text-xl font-extrabold tracking-tight">Treat {recipient?.name || "them"}</h2>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { Send, ArrowLeft, MoreHorizontal, Calendar, Image, Smile, Sparkles } from "lucide-react";
+import { Send, ArrowLeft, MoreHorizontal, Calendar, Image, Smile, Sparkles, MapPin, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ChatPage() {
   const params = useParams<{ id: string }>();
@@ -9,8 +10,10 @@ export default function ChatPage() {
   const [, navigate] = useLocation();
   const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const { toast } = useToast();
 
   const { data: messageData } = useQuery({
     queryKey: [`/api/matches/${matchId}/messages`],
@@ -66,9 +69,13 @@ export default function ChatPage() {
         <button onClick={() => navigate("/matches")} className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
           <ArrowLeft className="w-4 h-4 text-white" />
         </button>
-        <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
-          {otherUser?.name?.[0] || "?"}
-        </div>
+        {(otherUser?.photos as string[])?.[0] ? (
+          <img src={(otherUser.photos as string[])[0]} alt={otherUser?.name || ""} className="w-10 h-10 rounded-full object-cover flex-shrink-0" style={{ border: "2px solid rgba(255,27,141,0.4)" }} />
+        ) : (
+          <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
+            {otherUser?.name?.[0] || "?"}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-sm leading-tight truncate">{otherUser?.name || "Match"}</p>
           <div className="flex items-center gap-1.5">
@@ -103,9 +110,13 @@ export default function ChatPage() {
           return (
             <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
               {!isMe && (
-                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 mr-2 mt-1" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)" }}>
-                  {otherUser?.name?.[0] || "?"}
-                </div>
+                (otherUser?.photos as string[])?.[0] ? (
+                  <img src={(otherUser.photos as string[])[0]} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 mr-2 mt-1" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 mr-2 mt-1" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)" }}>
+                    {otherUser?.name?.[0] || "?"}
+                  </div>
+                )
               )}
               <div
                 className="max-w-xs px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
@@ -132,10 +143,52 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Plan Date Modal */}
+      {showDatePicker && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.7)" }}>
+          <div className="w-full max-w-lg rounded-t-3xl p-5 pb-8 space-y-4" style={{ background: "#141418", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-lg">Plan a Date</h3>
+              <button onClick={() => setShowDatePicker(false)} className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+                <X className="w-4 h-4 text-white" />
+              </button>
+            </div>
+            <p className="text-xs text-icebreaker-muted">Suggest a venue and time — {otherUser?.name?.split(" ")[0] || "they"}'ll get your invite!</p>
+            <div className="space-y-3">
+              {["Toit Brewpub — This Friday, 8 PM", "Skyye Rooftop — Saturday sunset", "Social Koramangala — Tomorrow evening"].map((option, i) => (
+                <button
+                  key={i}
+                  onClick={async () => {
+                    const token = localStorage.getItem("token");
+                    await fetch(`/api/matches/${matchId}/messages`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({ body: `📅 Date suggestion: ${option}` })
+                    }).then(r => r.json()).then(msg => {
+                      setMessages(prev => [...prev, msg]);
+                    });
+                    setShowDatePicker(false);
+                    toast({ title: "Date proposed!", description: `Sent: ${option}` });
+                  }}
+                  className="w-full flex items-center gap-3 p-4 rounded-2xl text-left transition-all active:scale-98"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}
+                  data-testid={`date-option-${i}`}
+                >
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: i === 0 ? "rgba(255,27,141,0.15)" : "rgba(0,207,255,0.1)" }}>
+                    <MapPin className="w-4 h-4" style={{ color: i === 0 ? "#FF1B8D" : "#00CFFF" }} />
+                  </div>
+                  <span className="font-semibold text-sm">{option}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input bar */}
       <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3" style={{ background: "linear-gradient(to top, #0A0A0C 80%, transparent)" }}>
         <div className="flex items-center gap-2 px-4 py-2 rounded-2xl" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
-          <button className="flex-shrink-0 p-1" data-testid="button-calendar">
+          <button className="flex-shrink-0 p-1" onClick={() => setShowDatePicker(true)} data-testid="button-calendar">
             <Calendar className="w-5 h-5 text-icebreaker-muted" />
           </button>
           <button className="flex-shrink-0 p-1" data-testid="button-image">

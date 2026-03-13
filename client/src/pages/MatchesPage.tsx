@@ -35,9 +35,13 @@ export default function MatchesPage() {
                 className="card-dark hover:border-icebreaker-coral/40 transition-all cursor-pointer flex items-center gap-3"
                 data-testid={`match-card-${match.id}`}
               >
-                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF 0%, #FF1B8D 100%)" }}>
-                  {match.otherUser?.name?.[0] || "?"}
-                </div>
+                {(match.otherUser?.photos as string[])?.[0] ? (
+                  <img src={(match.otherUser.photos as string[])[0]} alt={match.otherUser?.name || ""} className="w-12 h-12 rounded-full object-cover flex-shrink-0" style={{ border: "2px solid rgba(255,27,141,0.4)" }} />
+                ) : (
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF 0%, #FF1B8D 100%)" }}>
+                    {match.otherUser?.name?.[0] || "?"}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="font-bold truncate">{match.otherUser?.name || "Someone"}</p>
                   {match.lastMessage ? (

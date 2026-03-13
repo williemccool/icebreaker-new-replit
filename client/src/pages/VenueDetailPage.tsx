@@ -120,19 +120,27 @@ export default function VenueDetailPage() {
             </div>
             {checkedInUsers && checkedInUsers.length > 0 ? (
               <div className="grid grid-cols-4 gap-2">
-                {checkedInUsers.slice(0, 8).map(({ user }: any, i: number) => (
-                  <Link key={user.id} href={`/gift/${user.id}`}>
-                    <div className="flex flex-col items-center gap-1.5 cursor-pointer" data-testid={`checked-in-user-${user.id}`}>
-                      <div className="relative">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg text-white" style={{ background: i === 0 ? "linear-gradient(135deg, #FF1B8D, #d6007a)" : "linear-gradient(135deg, #00CFFF, #009ecf)", border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }}>
-                          {user.name?.[0] || "U"}
+                {checkedInUsers.slice(0, 8).map(({ user }: any, i: number) => {
+                  const photos = (user.photos as string[]) || [];
+                  const hasPhoto = photos.length > 0;
+                  return (
+                    <Link key={user.id} href={`/gift/${user.id}`}>
+                      <div className="flex flex-col items-center gap-1.5 cursor-pointer" data-testid={`checked-in-user-${user.id}`}>
+                        <div className="relative">
+                          {hasPhoto ? (
+                            <img src={photos[0]} alt={user.name || ""} className="w-14 h-14 rounded-full object-cover" style={{ border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }} />
+                          ) : (
+                            <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg text-white" style={{ background: i === 0 ? "linear-gradient(135deg, #FF1B8D, #d6007a)" : "linear-gradient(135deg, #00CFFF, #009ecf)", border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }}>
+                              {user.name?.[0] || "U"}
+                            </div>
+                          )}
+                          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-400 border-2 border-icebreaker-bg" />
                         </div>
-                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-400 border-2 border-icebreaker-bg" />
+                        <span className="text-[10px] font-semibold truncate w-full text-center">{user.name?.split(" ")[0]}</span>
                       </div>
-                      <span className="text-[10px] font-semibold truncate w-full text-center">{user.name?.split(" ")[0]}</span>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-8">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { MapPin, MoreHorizontal, Zap, Lock, Send, ChevronRight } from "lucide-react";
 
 const ROUNDS = [
@@ -32,6 +33,14 @@ const ROUNDS = [
   }
 ];
 
+const AVATARS = [
+  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
+  "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&q=80",
+  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&q=80",
+  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&q=80",
+  "https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=200&q=80",
+];
+
 export default function IcebreakerGamePage() {
   const { matchId } = useParams<{ matchId: string }>();
   const [, navigate] = useLocation();
@@ -39,12 +48,40 @@ export default function IcebreakerGamePage() {
   const [chosen, setChosen] = useState<number | null>(null);
   const [sent, setSent] = useState(false);
 
+  const { data: matchData } = useQuery({
+    queryKey: [`/api/matches/${matchId}`],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/matches/${matchId}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    },
+    enabled: !!matchId
+  });
+
+  const otherUser = matchData?.otherUser;
+  const match = matchData?.match;
+  const otherName = otherUser?.name?.split(" ")[0] || "Match";
+  const otherAge = otherUser?.dob ? Math.floor((Date.now() - new Date(otherUser.dob).getTime()) / (365.25 * 24 * 3600 * 1000)) : null;
+  const otherPhoto = (otherUser?.photos as string[])?.[0] || AVATARS[(otherUser?.id || 0) % AVATARS.length];
+  const venueName = match?.venueName || "Icebreaker";
+
   const currentRound = ROUNDS[round];
   const isLast = round === ROUNDS.length - 1;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (chosen === null) return;
     setSent(true);
+
+    const selectedText = currentRound.options[chosen].text;
+    const token = localStorage.getItem("token");
+    try {
+      await fetch(`/api/matches/${matchId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ body: `🎮 ${currentRound.title}: "${selectedText}"` })
+      });
+    } catch {}
+
     setTimeout(() => {
       if (isLast) {
         navigate(`/chat/${matchId}`);
@@ -71,14 +108,17 @@ export default function IcebreakerGamePage() {
       {/* Match info */}
       <div className="flex items-center justify-between px-5 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-white" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)" }}>
-            M
-          </div>
+          <img
+            src={otherPhoto}
+            alt={otherName}
+            className="w-11 h-11 rounded-full object-cover"
+            style={{ border: "2px solid rgba(0,207,255,0.4)" }}
+          />
           <div>
-            <p className="font-extrabold text-base">Marcus, 26</p>
+            <p className="font-extrabold text-base">{otherName}{otherAge ? `, ${otherAge}` : ""}</p>
             <div className="flex items-center gap-1.5">
               <MapPin className="w-3 h-3 text-icebreaker-coral" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-icebreaker-coral">You met at Neon High</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-icebreaker-coral">You met at {venueName}</span>
             </div>
           </div>
         </div>
@@ -96,9 +136,13 @@ export default function IcebreakerGamePage() {
 
       {/* Chat bubble */}
       <div className="px-5 mb-5">
-        <p className="text-xs text-icebreaker-muted font-semibold mb-2">Marcus</p>
+        <p className="text-xs text-icebreaker-muted font-semibold mb-2">{otherName}</p>
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)" }}>M</div>
+          <img
+            src={otherPhoto}
+            alt={otherName}
+            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+          />
           <div className="max-w-xs px-4 py-3 rounded-2xl rounded-tl-sm" style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}>
             <p className="text-sm font-semibold leading-snug">{currentRound.prompt}</p>
           </div>
