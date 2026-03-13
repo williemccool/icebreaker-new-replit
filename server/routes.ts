@@ -234,6 +234,11 @@ import type { Express } from "express";
       try {
         const updates = req.body;
         
+        // Convert date strings to Date objects for Drizzle
+        if (updates.dob && typeof updates.dob === "string") {
+          updates.dob = new Date(updates.dob);
+        }
+        
         const [updated] = await db.update(users)
           .set({ ...updates, updatedAt: new Date() })
           .where(eq(users.id, req.userId))
@@ -622,7 +627,7 @@ import type { Express } from "express";
           .where(eq(cubeWallets.userId, req.userId))
           .limit(1);
         
-        if (wallet.balance < event.price) {
+        if ((wallet?.balance ?? 0) < (event.price ?? 0)) {
           return res.status(400).json({ error: "Insufficient cubes" });
         }
         
@@ -632,11 +637,11 @@ import type { Express } from "express";
           eventId,
           userId: req.userId,
           qrCode,
-          pricePaid: event.price
+          pricePaid: event.price ?? 0
         }).returning();
         
         // Deduct from wallet
-        if (event.price > 0) {
+        if ((event.price ?? 0) > 0) {
           await db.update(cubeWallets)
             .set({ 
               balance: sql`balance - ${event.price}`,
@@ -746,7 +751,7 @@ import type { Express } from "express";
           .where(eq(cubeWallets.userId, req.userId))
           .limit(1);
         
-        if (wallet.balance < cubesCost) {
+        if ((wallet?.balance ?? 0) < cubesCost) {
           return res.status(400).json({ error: "Insufficient cubes" });
         }
         
