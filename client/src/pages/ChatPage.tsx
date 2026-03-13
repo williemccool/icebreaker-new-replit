@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "wouter";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Send, ArrowLeft, Sparkles } from "lucide-react";
-import { Link } from "wouter";
+import { useParams, useLocation } from "wouter";
+import { Send, ArrowLeft, MoreHorizontal, Calendar, Image, Smile, Sparkles } from "lucide-react";
 
 export default function ChatPage() {
-  const params = useParams();
+  const params = useParams<{ id: string }>();
   const matchId = parseInt(params.id || "0");
+  const [, navigate] = useLocation();
   const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -19,6 +17,17 @@ export default function ChatPage() {
     queryFn: async () => {
       const token = localStorage.getItem("token");
       const res = await fetch(`/api/matches/${matchId}/messages`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.json();
+    }
+  });
+
+  const { data: matchData } = useQuery({
+    queryKey: [`/api/matches/${matchId}`],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/matches/${matchId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return res.json();
@@ -39,7 +48,7 @@ export default function ChatPage() {
     const res = await fetch(`/api/matches/${matchId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ body: newMessage })
+      body: JSON.stringify({ content: newMessage })
     });
     if (res.ok) {
       const msg = await res.json();
@@ -48,86 +57,109 @@ export default function ChatPage() {
     }
   };
 
+  const otherUser = matchData?.otherUser;
+
   return (
-    <div className="h-screen flex flex-col bg-icebreaker-bg">
+    <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>
       {/* Header */}
-      <div className="page-header flex-shrink-0">
-        <div className="flex items-center gap-3 max-w-lg mx-auto">
-          <Link href="/matches">
-            <button className="w-9 h-9 rounded-xl flex items-center justify-center bg-icebreaker-surface border border-icebreaker-border hover:border-icebreaker-coral/40 transition-all" data-testid="button-back-chat">
-              <ArrowLeft className="w-4 h-4 text-icebreaker-muted" />
-            </button>
-          </Link>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #00CFFF 0%, #FF1B8D 100%)" }}>
-            M
+      <div className="flex items-center gap-3 px-4 pt-5 pb-3 sticky top-0 z-20" style={{ background: "rgba(10,10,12,0.95)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <button onClick={() => navigate("/matches")} className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)" }}>
+          <ArrowLeft className="w-4 h-4 text-white" />
+        </button>
+        <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
+          {otherUser?.name?.[0] || "?"}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-extrabold text-sm leading-tight truncate">{otherUser?.name || "Match"}</p>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <span className="text-[10px] font-semibold text-green-400">Online</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-extrabold text-sm truncate">Match</p>
-            <p className="text-xs text-icebreaker-teal font-medium">Online now</p>
-          </div>
-          <button className="w-9 h-9 rounded-xl flex items-center justify-center bg-icebreaker-surface border border-icebreaker-border" data-testid="button-icebreaker-ai">
-            <Sparkles className="w-4 h-4 text-icebreaker-coral" />
-          </button>
+        </div>
+        <button className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+          <MoreHorizontal className="w-4 h-4 text-icebreaker-muted" />
+        </button>
+      </div>
+
+      {/* Ice broken banner */}
+      <div className="mx-4 mt-3">
+        <div className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl" style={{ background: "rgba(255,27,141,0.12)", border: "1px solid rgba(255,27,141,0.3)" }}>
+          <Sparkles className="w-4 h-4 text-icebreaker-coral" />
+          <span className="text-sm font-bold text-icebreaker-coral">✨ ICE BROKEN</span>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 pb-2 max-w-lg mx-auto w-full">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-32">
+        {/* Structured complete banner */}
+        <div className="text-center py-3">
+          <span className="text-xs text-icebreaker-muted font-semibold px-4 py-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            Structured mode complete. You can now chat freely!
+          </span>
+        </div>
+
+        {messages.map((msg: any, i: number) => {
+          const isMe = msg.senderId === user.id;
+          return (
+            <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+              {!isMe && (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 mr-2 mt-1" style={{ background: "linear-gradient(135deg, #00CFFF, #0080aa)" }}>
+                  {otherUser?.name?.[0] || "?"}
+                </div>
+              )}
+              <div
+                className="max-w-xs px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
+                style={isMe
+                  ? { background: "linear-gradient(135deg, #FF1B8D, #c4006e)", color: "white", borderBottomRightRadius: 6 }
+                  : { background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", color: "#F0F2F7", borderBottomLeftRadius: 6 }}
+                data-testid={`message-${i}`}
+              >
+                {msg.content}
+              </div>
+            </div>
+          );
+        })}
+
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-4 opacity-60">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.15) 0%, rgba(0,207,255,0.15) 100%)" }}>
-              <Sparkles className="w-7 h-7 text-icebreaker-coral" />
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "rgba(255,27,141,0.1)", border: "1px solid rgba(255,27,141,0.2)" }}>
+              <Sparkles className="w-8 h-8 text-icebreaker-coral" />
             </div>
-            <div className="text-center">
-              <p className="font-bold text-sm">Break the ice!</p>
-              <p className="text-xs text-icebreaker-muted mt-1">Send the first message</p>
-            </div>
+            <p className="text-icebreaker-muted text-sm text-center">Ice is broken! Say something…</p>
           </div>
         )}
-        <div className="space-y-3">
-          {messages.map((msg) => {
-            const isMine = msg.senderId === user.id;
-            return (
-              <div key={msg.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`} data-testid={`message-${msg.id}`}>
-                <div
-                  className={`max-w-[72%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                    isMine
-                      ? "text-white rounded-br-md"
-                      : "bg-icebreaker-surface text-icebreaker-text rounded-bl-md"
-                  }`}
-                  style={isMine ? { background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" } : undefined}
-                >
-                  <p>{msg.body}</p>
-                  <p className="text-xs opacity-60 mt-1 text-right">
-                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-          <div ref={messagesEndRef} />
-        </div>
+
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="flex-shrink-0 border-t border-icebreaker-border p-3" style={{ background: "rgba(14,15,19,0.96)", backdropFilter: "blur(20px)" }}>
-        <div className="flex gap-2 max-w-lg mx-auto">
-          <Input
-            data-testid="input-message"
+      {/* Input bar */}
+      <div className="fixed bottom-0 left-0 right-0 px-4 pb-6 pt-3" style={{ background: "linear-gradient(to top, #0A0A0C 80%, transparent)" }}>
+        <div className="flex items-center gap-2 px-4 py-2 rounded-2xl" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <button className="flex-shrink-0 p-1" data-testid="button-calendar">
+            <Calendar className="w-5 h-5 text-icebreaker-muted" />
+          </button>
+          <button className="flex-shrink-0 p-1" data-testid="button-image">
+            <Image className="w-5 h-5 text-icebreaker-muted" />
+          </button>
+          <input
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Type a message..."
-            className="flex-1 h-11 bg-icebreaker-surface border-icebreaker-border text-icebreaker-text placeholder:text-icebreaker-muted"
+            onChange={e => setNewMessage(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSend()}
+            placeholder="Type a message…"
+            className="flex-1 bg-transparent text-sm text-white placeholder:text-icebreaker-muted/50 outline-none"
+            data-testid="input-message"
           />
-          <Button
+          <button className="flex-shrink-0 p-1" data-testid="button-emoji">
+            <Smile className="w-5 h-5 text-icebreaker-muted" />
+          </button>
+          <button
             onClick={handleSend}
-            disabled={!newMessage.trim()}
-            className="h-11 w-11 btn-coral p-0 flex-shrink-0"
-            data-testid="button-send-message"
+            className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90"
+            style={{ background: newMessage.trim() ? "linear-gradient(135deg, #FF1B8D, #c4006e)" : "rgba(255,255,255,0.08)" }}
+            data-testid="button-send"
           >
-            <Send className="w-4 h-4" />
-          </Button>
+            <Send className="w-4 h-4 text-white" />
+          </button>
         </div>
       </div>
     </div>

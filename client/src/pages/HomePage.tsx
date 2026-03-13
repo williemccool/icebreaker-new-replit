@@ -1,25 +1,19 @@
-import { Link } from "wouter";
-import { Button } from "@/components/ui/button";
-import { MapPin, Users, Calendar, Sparkles, Zap, Trophy } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { MapPin, Users, Calendar, Sparkles, Bell, Radio, Mic, Trophy, ChevronRight, Heart } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { Flame } from "lucide-react";
+import { useState } from "react";
+
+const TABS = ["Dating", "Friends", "Crew", "Events"];
 
 export default function HomePage() {
-  const [user, setUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("Dating");
+  const [, navigate] = useLocation();
 
-  useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (userData) setUser(JSON.parse(userData));
-  }, []);
-
-  const { data: walletData } = useQuery({
+  const { data: userData } = useQuery({
     queryKey: ["/api/user/me"],
     queryFn: async () => {
       const token = localStorage.getItem("token");
-      const res = await fetch("/api/user/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetch("/api/user/me", { headers: { Authorization: `Bearer ${token}` } });
       return res.json();
     }
   });
@@ -32,6 +26,14 @@ export default function HomePage() {
     }
   });
 
+  const { data: rooms } = useQuery({
+    queryKey: ["/api/rooms"],
+    queryFn: async () => {
+      const res = await fetch("/api/rooms");
+      return res.json();
+    }
+  });
+
   const { data: events } = useQuery({
     queryKey: ["/api/events"],
     queryFn: async () => {
@@ -40,191 +42,136 @@ export default function HomePage() {
     }
   });
 
-  const hotVenues = venues?.filter((v: any) => v.partner)?.slice(0, 3) || [];
-  const nextEvent = events?.[0];
+  const user = userData?.user;
+  const wallet = userData?.wallet;
+  const hotVenues = (venues || []).slice(0, 4);
+  const liveRooms = (rooms || []).slice(0, 2);
+  const nextEvent = (events || [])[0];
 
   return (
-    <div className="min-h-screen pb-24">
+    <div className="min-h-screen pb-24" style={{ background: "#0A0A0C" }}>
+
       {/* Header */}
-      <div className="page-header">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }}>
-              <Flame className="w-4 h-4 text-white" />
+      <div className="sticky top-0 z-20 px-4 pt-4 pb-3" style={{ background: "rgba(10,10,12,0.95)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <div className="max-w-lg mx-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
+                <Heart className="w-4 h-4 text-white" fill="white" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-icebreaker-muted uppercase tracking-widest">Tonight in</p>
+                <p className="text-sm font-extrabold tracking-tight -mt-0.5">Bangalore ▼</p>
+              </div>
             </div>
-            <h1 className="text-xl font-extrabold tracking-tight">
-              <span className="text-icebreaker-coral">Ice</span><span className="text-icebreaker-teal">breaker</span>
-            </h1>
+            <div className="flex items-center gap-2">
+              <button className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="button-notifications">
+                <Bell className="w-4 h-4 text-icebreaker-muted" />
+              </button>
+              <Link href="/profile">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }} data-testid="avatar-header">
+                  {user?.name?.[0] || "U"}
+                </div>
+              </Link>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Link href="/quests">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-icebreaker-surface border border-icebreaker-border cursor-pointer" data-testid="cubes-balance">
-                <Sparkles className="w-3.5 h-3.5 text-icebreaker-coral" />
-                <span className="font-bold text-sm">{walletData?.wallet?.balance ?? "—"}</span>
-                <span className="text-xs text-icebreaker-muted">Cubes</span>
-              </div>
-            </Link>
-            <Link href="/profile">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white cursor-pointer" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }} data-testid="avatar-header">
-                {user?.name?.[0] || "U"}
-              </div>
-            </Link>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+            {TABS.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap transition-all flex-shrink-0 ${activeTab === tab ? "text-white" : "text-icebreaker-muted"}`}
+                style={activeTab === tab ? { background: "rgba(255,27,141,0.2)", border: "1px solid rgba(255,27,141,0.4)", color: "#FF1B8D" } : {}}
+                data-testid={`tab-${tab.toLowerCase()}`}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto p-4 space-y-6">
-        {/* Welcome */}
-        <div>
-          <p className="text-icebreaker-muted text-sm font-medium">Good evening 👋</p>
-          <h2 className="text-2xl font-extrabold tracking-tight mt-0.5">
-            {user?.name ? `Hey, ${user.name.split(" ")[0]}` : "Welcome back"}
-          </h2>
-        </div>
+      <div className="max-w-lg mx-auto px-4 space-y-5 pt-4">
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-3">
+        {/* Go out tonight */}
+        <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: "linear-gradient(135deg, #141418 0%, #1a1420 100%)", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="absolute right-0 top-0 bottom-0 w-24 opacity-20" style={{ background: "radial-gradient(ellipse at right, #FF1B8D 0%, transparent 70%)" }} />
+          <h2 className="text-xl font-extrabold mb-1">Go out tonight</h2>
+          <p className="text-sm text-icebreaker-muted mb-4">Find the vibe, check who's there, and meet IRL.</p>
           <Link href="/venues">
-            <div className="card-dark cursor-pointer hover:border-icebreaker-coral/50 transition-all group" data-testid="quick-action-venues">
-              <div className="icon-badge-coral mb-3">
-                <MapPin className="w-5 h-5 text-icebreaker-coral" />
-              </div>
-              <h3 className="font-bold text-sm">Check In</h3>
-              <p className="text-xs text-icebreaker-muted mt-0.5">Find venues near you</p>
-            </div>
+            <button className="flex items-center gap-2 h-11 px-5 rounded-2xl font-bold text-sm text-white w-full justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 24px rgba(255,27,141,0.4)" }} data-testid="button-explore-venues">
+              <MapPin className="w-4 h-4" />
+              Explore venues & check in
+            </button>
           </Link>
-          <Link href="/rooms">
-            <div className="card-dark cursor-pointer hover:border-icebreaker-teal/50 transition-all group" data-testid="quick-action-rooms">
-              <div className="icon-badge-teal mb-3">
-                <Users className="w-5 h-5 text-icebreaker-teal" />
-              </div>
-              <h3 className="font-bold text-sm">Virtual Rooms</h3>
-              <p className="text-xs text-icebreaker-muted mt-0.5">Meet people digitally</p>
-            </div>
-          </Link>
-          <Link href="/discover">
-            <div className="card-dark cursor-pointer hover:border-icebreaker-coral/50 transition-all group" data-testid="quick-action-discover">
-              <div className="icon-badge-teal mb-3">
-                <Zap className="w-5 h-5 text-icebreaker-teal" />
-              </div>
-              <h3 className="font-bold text-sm">Discover</h3>
-              <p className="text-xs text-icebreaker-muted mt-0.5">Swipe & match</p>
-            </div>
-          </Link>
-          <Link href="/events">
-            <div className="card-dark cursor-pointer hover:border-icebreaker-coral/50 transition-all group" data-testid="quick-action-events">
-              <div className="icon-badge-coral mb-3">
-                <Calendar className="w-5 h-5 text-icebreaker-coral" />
-              </div>
-              <h3 className="font-bold text-sm">Events</h3>
-              <p className="text-xs text-icebreaker-muted mt-0.5">Speed dating & mixers</p>
-            </div>
-          </Link>
+          <p className="text-xs text-icebreaker-muted/60 text-center mt-2">View your favourite spots</p>
         </div>
 
-        {/* How it Works */}
-        <div>
-          <h3 className="text-base font-extrabold mb-3 tracking-tight">How Icebreaker Works</h3>
-          <div className="grid grid-cols-1 gap-3">
-            {/* Physical Check-in */}
-            <div className="card-dark">
-              <div className="flex items-start gap-3 mb-4">
-                <div className="icon-badge-coral">
-                  <MapPin className="w-5 h-5 text-icebreaker-coral" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-base tracking-tight">Physical Check-in</h4>
-                  <p className="text-xs text-icebreaker-muted mt-1 leading-relaxed">
-                    Already at the venue? Check in to see the profile of everyone around you right now.
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {[
-                  { n: 1, title: "See who's here", desc: "Browse active profiles in the room." },
-                  { n: 2, title: "Spot & Approach", desc: "Send a digital wave or just walk over." },
-                  { n: 3, title: "Meet in the Zone", desc: "Head to the designated Icebreaker Zone." },
-                ].map(({ n, title, desc }) => (
-                  <div key={n} className="flex items-start gap-3">
-                    <div className="num-badge-coral mt-0.5">{n}</div>
-                    <div>
-                      <p className="text-sm font-bold">{title}</p>
-                      <p className="text-xs text-icebreaker-muted">{desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="divider-glow mt-4 mb-3" />
-              <div className="flex items-center gap-2">
-                <Zap className="w-3 h-3 text-icebreaker-coral" />
-                <span className="tag-coral">Best for spontaneous vibes</span>
-              </div>
-            </div>
-
-            {/* Virtual Rooms */}
-            <div className="card-dark">
-              <div className="flex items-start gap-3 mb-4">
-                <div className="icon-badge-teal">
-                  <Users className="w-5 h-5 text-icebreaker-teal" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-base tracking-tight">Join Virtual Room</h4>
-                  <p className="text-xs text-icebreaker-muted mt-1 leading-relaxed">
-                    Match and chat digitally with people at the venue before you meet face-to-face.
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {[
-                  { n: 1, title: "Enter the Room", desc: "Join the venue's exclusive digital space." },
-                  { n: 2, title: "Match & Chat", desc: "Break the ice online first." },
-                  { n: 3, title: "Meet & Get Rewards", desc: "Meet IRL at the venue to unlock 50% off drinks.", coral: true },
-                ].map(({ n, title, desc, coral }) => (
-                  <div key={n} className="flex items-start gap-3">
-                    <div className="num-badge-teal mt-0.5">{n}</div>
-                    <div>
-                      <p className="text-sm font-bold">{title}</p>
-                      <p className="text-xs text-icebreaker-muted">
-                        {coral ? (
-                          <>{desc.split("50% off drinks")[0]}<span className="text-icebreaker-coral font-semibold">50% off drinks</span>{desc.split("50% off drinks")[1]}</>
-                        ) : desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="divider-glow mt-4 mb-3" />
-              <div className="flex items-center gap-2">
-                <Users className="w-3 h-3 text-icebreaker-teal" />
-                <span className="tag-teal">Best for breaking the ice safely</span>
-              </div>
-            </div>
+        {/* Icebreaker Live */}
+        <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: "linear-gradient(135deg, #0d0d1a 0%, #141428 100%)", border: "1px solid rgba(0,207,255,0.15)" }}>
+          <div className="absolute right-0 top-0 bottom-0 w-32 opacity-15" style={{ background: "radial-gradient(ellipse at right, #00CFFF 0%, transparent 70%)" }} />
+          <div className="flex items-center gap-2 mb-2">
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: "rgba(255,27,141,0.2)", border: "1px solid rgba(255,27,141,0.4)", color: "#FF1B8D" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-icebreaker-coral animate-pulse" />
+              LIVE NOW
+            </span>
+            <span className="text-[10px] text-icebreaker-muted font-semibold">24h LEFT</span>
           </div>
+          <h2 className="text-xl font-extrabold mb-1">Icebreaker Live</h2>
+          <p className="text-sm text-icebreaker-muted mb-4">Jump into audio rooms and meet people from home.</p>
+          <Link href="/rooms">
+            <button className="flex items-center gap-2 h-11 px-5 rounded-2xl font-bold text-sm w-full justify-center" style={{ background: "rgba(0,207,255,0.1)", border: "1.5px solid rgba(0,207,255,0.4)", color: "#00CFFF" }} data-testid="button-join-live-room">
+              <Mic className="w-4 h-4" />
+              Join a Live room
+            </button>
+          </Link>
+          <p className="text-xs text-icebreaker-muted/60 text-center mt-2">See tonight's schedule</p>
         </div>
 
-        {/* Hot Venues */}
+        {/* Quick action grid */}
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { label: "My venues", icon: MapPin, href: "/venues", color: "#FF1B8D" },
+            { label: "Rooms joined", icon: Users, href: "/rooms", color: "#00CFFF" },
+            { label: "My vouchers", icon: Trophy, href: "/quests", color: "#FF1B8D" },
+            { label: "Quests", icon: Sparkles, href: "/quests", color: "#00CFFF" },
+          ].map(({ label, icon: Icon, href, color }) => (
+            <Link key={href + label} href={href}>
+              <div className="flex flex-col items-center gap-2 p-3 rounded-2xl cursor-pointer" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }} data-testid={`quick-action-${label.toLowerCase().replace(/ /g, "-")}`}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${color}18`, border: `1px solid ${color}33` }}>
+                  <Icon className="w-4 h-4" style={{ color }} />
+                </div>
+                <span className="text-[10px] font-semibold text-icebreaker-muted text-center leading-tight">{label}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+
+        {/* Venues near you */}
         {hotVenues.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-extrabold tracking-tight">🔥 Hot Tonight</h3>
+              <h3 className="text-base font-extrabold tracking-tight">Venues near you</h3>
               <Link href="/venues">
-                <span className="text-xs text-icebreaker-coral font-semibold cursor-pointer">See all →</span>
+                <span className="text-xs font-bold text-icebreaker-coral cursor-pointer">See all →</span>
               </Link>
             </div>
-            <div className="space-y-2">
+            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
               {hotVenues.map((venue: any) => (
                 <Link key={venue.id} href={`/venues/${venue.id}`}>
-                  <div className="card-dark hover:border-icebreaker-coral/40 transition-all cursor-pointer flex items-center gap-3 py-3" data-testid={`venue-card-${venue.id}`}>
-                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.2) 0%, rgba(0,207,255,0.2) 100%)" }}>
-                      <MapPin className="w-5 h-5 text-icebreaker-coral" />
+                  <div className="flex-shrink-0 w-36 rounded-2xl overflow-hidden cursor-pointer" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }} data-testid={`venue-card-${venue.id}`}>
+                    <div className="h-24 flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.2), rgba(0,207,255,0.2))" }}>
+                      <MapPin className="w-8 h-8 text-icebreaker-coral" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm truncate">{venue.name}</p>
-                      <p className="text-xs text-icebreaker-muted">{venue.area} · {venue.type}</p>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-icebreaker-teal animate-pulse" />
-                      <span className="text-xs font-bold text-icebreaker-teal">{venue.peopleHere || 0}</span>
+                    <div className="p-2.5">
+                      <p className="font-bold text-xs leading-snug truncate">{venue.name}</p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-icebreaker-teal animate-pulse" />
+                        <span className="text-[10px] text-icebreaker-teal font-semibold">Hot</span>
+                        <span className="text-[10px] text-icebreaker-muted">• {venue.area || venue.type}</span>
+                      </div>
                     </div>
                   </div>
                 </Link>
@@ -233,30 +180,56 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Next Event */}
+        {/* Icebreaker Live tonight */}
+        {liveRooms.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-extrabold tracking-tight">Icebreaker Live tonight</h3>
+              <Link href="/rooms">
+                <span className="text-xs font-bold text-icebreaker-coral cursor-pointer">See all →</span>
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {liveRooms.map((room: any) => (
+                <Link key={room.id} href={`/rooms/${room.id}`}>
+                  <div className="flex items-center gap-3 p-3 rounded-2xl cursor-pointer" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }} data-testid={`live-room-${room.id}`}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(0,207,255,0.15)", border: "1px solid rgba(0,207,255,0.3)" }}>
+                      <Radio className="w-4 h-4 text-icebreaker-teal" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm truncate">{room.name}</p>
+                      <p className="text-xs text-icebreaker-muted">{room.participants || 0} joined</p>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(255,27,141,0.2)", color: "#FF1B8D" }}>LIVE</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Events & Crew plans */}
         {nextEvent && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-extrabold tracking-tight">🎉 Upcoming Event</h3>
+              <h3 className="text-base font-extrabold tracking-tight">Events & Crew plans</h3>
               <Link href="/events">
-                <span className="text-xs text-icebreaker-coral font-semibold cursor-pointer">See all →</span>
+                <span className="text-xs font-bold text-icebreaker-coral cursor-pointer">See all →</span>
               </Link>
             </div>
             <Link href="/events">
-              <div className="card-dark cursor-pointer hover:border-icebreaker-coral/40 transition-all" data-testid="upcoming-event-card">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <span className="pill-coral text-xs mb-2 inline-block">{nextEvent.type}</span>
-                    <h4 className="font-extrabold text-sm leading-snug">{nextEvent.title}</h4>
-                    <p className="text-xs text-icebreaker-muted mt-1">
-                      {new Date(nextEvent.startsAt).toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" })}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="font-extrabold text-lg text-icebreaker-coral">
-                      {nextEvent.price === 0 ? "Free" : `₹${nextEvent.price}`}
+              <div className="relative rounded-2xl overflow-hidden cursor-pointer" style={{ border: "1px solid rgba(255,255,255,0.07)" }} data-testid="upcoming-event-card">
+                <div className="h-28 flex items-end p-4" style={{ background: "linear-gradient(135deg, #1a0d0d, #1a1a2e)" }}>
+                  <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(10,10,12,0.9) 0%, transparent 60%)" }} />
+                  <div className="relative z-10 flex items-end justify-between w-full">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-icebreaker-coral">{nextEvent.type}</span>
+                      <p className="font-extrabold text-base leading-tight">{nextEvent.title}</p>
+                      <p className="text-xs text-icebreaker-muted">{new Date(nextEvent.startsAt).toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" })}</p>
                     </div>
-                    <div className="text-xs text-icebreaker-muted">{nextEvent.capacity} spots</div>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "rgba(255,27,141,0.3)", border: "1px solid rgba(255,27,141,0.5)" }}>
+                      <ChevronRight className="w-4 h-4 text-icebreaker-coral" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -266,13 +239,13 @@ export default function HomePage() {
 
         {/* Leaderboard CTA */}
         <Link href="/leaderboard">
-          <div className="cursor-pointer rounded-2xl p-4 flex items-center gap-3" style={{ background: "linear-gradient(135deg, rgba(255,176,32,0.1) 0%, rgba(255,27,141,0.08) 100%)", border: "1px solid rgba(255,176,32,0.2)" }} data-testid="leaderboard-cta">
+          <div className="cursor-pointer rounded-2xl p-4 flex items-center gap-3" style={{ background: "linear-gradient(135deg, rgba(255,176,32,0.08) 0%, rgba(255,27,141,0.06) 100%)", border: "1px solid rgba(255,176,32,0.2)" }} data-testid="leaderboard-cta">
             <Trophy className="w-8 h-8 text-yellow-400 flex-shrink-0" />
             <div>
               <p className="font-extrabold text-sm">Season Leaderboard</p>
               <p className="text-xs text-icebreaker-muted">Climb the ranks. Win real rewards.</p>
             </div>
-            <span className="ml-auto text-icebreaker-muted text-sm">→</span>
+            <ChevronRight className="ml-auto text-icebreaker-muted w-4 h-4" />
           </div>
         </Link>
       </div>
