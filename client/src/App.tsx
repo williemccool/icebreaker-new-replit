@@ -3,11 +3,12 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { useEffect, useState } from "react";
-import { Home, Compass, MapPin, MessageCircle, User } from "lucide-react";
+import { Home, Compass, MapPin, MessageCircle, User, Radio } from "lucide-react";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
 import OnboardingPage from "./pages/OnboardingPage";
+import TutorialPage from "./pages/TutorialPage";
 import HomePage from "./pages/HomePage";
 import DiscoverPage from "./pages/DiscoverPage";
 import VenuesPage from "./pages/VenuesPage";
@@ -20,18 +21,33 @@ import EventsPage from "./pages/EventsPage";
 import ProfilePage from "./pages/ProfilePage";
 import QuestsPage from "./pages/QuestsPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
+import MutualMatchPage from "./pages/MutualMatchPage";
+import IcebreakerGamePage from "./pages/IcebreakerGamePage";
+import GiftDrinkPage from "./pages/GiftDrinkPage";
+import PaymentPage from "./pages/PaymentPage";
+import ConfirmPurchasePage from "./pages/ConfirmPurchasePage";
+import TrustSafetyPage from "./pages/TrustSafetyPage";
 import NotFoundPage from "./pages/not-found";
+
+const HIDE_NAV_ROUTES = [
+  "/auth", "/onboarding", "/tutorial",
+  "/match/", "/game/", "/gift/", "/payment", "/safety"
+];
 
 const NAV_ITEMS = [
   { href: "/", icon: Home, label: "Home" },
   { href: "/discover", icon: Compass, label: "Discover" },
-  { href: "/venues", icon: MapPin, label: "Venues" },
-  { href: "/matches", icon: MessageCircle, label: "Matches" },
+  { href: "/rooms", icon: Radio, label: "Live" },
+  { href: "/matches", icon: MessageCircle, label: "Chats" },
   { href: "/profile", icon: User, label: "Profile" },
 ];
 
 function BottomNav() {
   const [location] = useLocation();
+  const hide = HIDE_NAV_ROUTES.some(r => location.startsWith(r)) ||
+    location.startsWith("/chat/") || location.startsWith("/game/");
+
+  if (hide) return null;
 
   return (
     <nav className="bottom-nav safe-area-bottom" data-testid="bottom-nav">
@@ -40,12 +56,15 @@ function BottomNav() {
           const isActive = location === href || (href !== "/" && location.startsWith(href));
           return (
             <Link key={href} href={href}>
-              <div
-                className={`bottom-nav-item ${isActive ? "active" : ""}`}
-                data-testid={`nav-${label.toLowerCase()}`}
-              >
-                <Icon className={`nav-icon w-5 h-5 ${isActive ? "text-icebreaker-coral" : "text-icebreaker-muted"}`} strokeWidth={isActive ? 2.5 : 1.8} />
-                <span>{label}</span>
+              <div className={`bottom-nav-item ${isActive ? "active" : ""}`} data-testid={`nav-${label.toLowerCase()}`}>
+                {isActive && href === "/rooms" ? (
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D, #c4006e)", boxShadow: "0 0 16px rgba(255,27,141,0.5)" }}>
+                    <Icon className="w-5 h-5 text-white" strokeWidth={2.5} />
+                  </div>
+                ) : (
+                  <Icon className={`nav-icon w-5 h-5 ${isActive ? "text-icebreaker-coral" : "text-icebreaker-muted"}`} strokeWidth={isActive ? 2.5 : 1.8} />
+                )}
+                <span className={isActive ? "text-icebreaker-coral" : ""}>{label}</span>
               </div>
             </Link>
           );
@@ -67,10 +86,10 @@ function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-icebreaker-bg flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0A0A0C" }}>
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-pink-cyan animate-pulse" />
-          <span className="text-icebreaker-muted text-sm font-semibold">Loading...</span>
+          <div className="w-12 h-12 rounded-2xl animate-pulse" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }} />
+          <span className="text-icebreaker-muted text-sm font-semibold">Loading…</span>
         </div>
       </div>
     );
@@ -90,6 +109,7 @@ function App() {
       <div className="min-h-screen bg-icebreaker-bg text-icebreaker-text">
         <Switch>
           <Route path="/" component={HomePage} />
+          <Route path="/tutorial" component={TutorialPage} />
           <Route path="/onboarding" component={OnboardingPage} />
           <Route path="/discover" component={DiscoverPage} />
           <Route path="/venues" component={VenuesPage} />
@@ -102,6 +122,12 @@ function App() {
           <Route path="/profile" component={ProfilePage} />
           <Route path="/quests" component={QuestsPage} />
           <Route path="/leaderboard" component={LeaderboardPage} />
+          <Route path="/match/:matchId" component={MutualMatchPage} />
+          <Route path="/game/:matchId" component={IcebreakerGamePage} />
+          <Route path="/gift/:userId" component={GiftDrinkPage} />
+          <Route path="/payment" component={PaymentPage} />
+          <Route path="/payment/confirm" component={ConfirmPurchasePage} />
+          <Route path="/safety" component={TrustSafetyPage} />
           <Route component={NotFoundPage} />
         </Switch>
         <BottomNav />

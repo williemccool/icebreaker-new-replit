@@ -1,19 +1,18 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Flame } from "lucide-react";
+import { Smartphone, User, GlassWater } from "lucide-react";
 
 export default function AuthPage({ onAuth }: { onAuth: () => void }) {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [step, setStep] = useState<"welcome" | "phone" | "otp">("welcome");
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const sendOTP = async () => {
     if (!phone || phone.length < 10) {
-      toast({ title: "Please enter a valid phone number", variant: "destructive" });
+      toast({ title: "Enter a valid phone number", variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -25,20 +24,18 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
       });
       if (res.ok) {
         setStep("otp");
-        toast({ title: "OTP sent to your phone" });
+        toast({ title: "OTP sent!" });
       } else {
         toast({ title: "Failed to send OTP", variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Network error", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   const verifyOTP = async () => {
-    if (!otp || otp.length !== 6) {
-      toast({ title: "Enter the 6-digit OTP", variant: "destructive" });
+    if (!otp || otp.length < 4) {
+      toast({ title: "Enter your OTP", variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -48,118 +45,131 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp })
       });
-      const data = await res.json();
       if (res.ok) {
+        const data = await res.json();
         localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-        toast({ title: "Welcome to Icebreaker! 🎉" });
-        if (data.isNewUser) {
-          window.location.href = "/onboarding";
-        } else {
-          onAuth();
-        }
+        onAuth();
       } else {
-        toast({ title: data.error || "Invalid OTP", variant: "destructive" });
+        toast({ title: "Invalid OTP", variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Network error", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "linear-gradient(160deg, #0E0F13 0%, #181B22 50%, #0E0F13 100%)" }}>
+    <div className="min-h-screen flex flex-col items-center justify-between relative overflow-hidden" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(255,27,141,0.18) 0%, transparent 60%), radial-gradient(ellipse at 50% 100%, rgba(0,207,255,0.14) 0%, transparent 60%), #0A0A0C" }}>
 
-      {/* Background glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full opacity-10" style={{ background: "radial-gradient(circle, #FF1B8D 0%, transparent 70%)" }} />
-        <div className="absolute bottom-1/3 left-1/4 w-72 h-72 rounded-full opacity-8" style={{ background: "radial-gradient(circle, #00CFFF 0%, transparent 70%)" }} />
+      {/* Top ambient glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 rounded-full opacity-20 pointer-events-none" style={{ background: "radial-gradient(circle, #FF1B8D 0%, transparent 70%)" }} />
+
+      <div className="flex-1 flex flex-col items-center justify-center w-full max-w-sm px-6 pt-16">
+        {/* Logo icon */}
+        <div className="w-24 h-24 rounded-full flex items-center justify-center mb-8" style={{ background: "rgba(255,255,255,0.06)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 0 40px rgba(255,27,141,0.15)" }}>
+          <GlassWater className="w-10 h-10 text-white" strokeWidth={1.5} />
+        </div>
+
+        {step === "welcome" && (
+          <>
+            <h1 className="text-4xl font-extrabold text-white text-center mb-2 tracking-tight">Icebreaker</h1>
+            <p className="text-icebreaker-muted text-center text-base mb-12">Meet where you go out.</p>
+          </>
+        )}
+
+        {step === "phone" && (
+          <>
+            <h2 className="text-2xl font-extrabold text-white text-center mb-1">Your number</h2>
+            <p className="text-icebreaker-muted text-sm text-center mb-8">We'll send a one-time code to verify you</p>
+            <div className="w-full mb-4">
+              <Input
+                type="tel"
+                placeholder="+91 98765 43210"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                className="h-14 text-center text-lg rounded-2xl bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-icebreaker-coral/60"
+                data-testid="input-phone"
+              />
+            </div>
+          </>
+        )}
+
+        {step === "otp" && (
+          <>
+            <h2 className="text-2xl font-extrabold text-white text-center mb-1">Enter code</h2>
+            <p className="text-icebreaker-muted text-sm text-center mb-8">Sent to {phone}</p>
+            <div className="w-full mb-4">
+              <Input
+                type="text"
+                placeholder="• • • • • •"
+                value={otp}
+                onChange={e => setOtp(e.target.value)}
+                maxLength={6}
+                className="h-14 text-center text-2xl tracking-[0.5em] rounded-2xl bg-white/5 border-white/10 text-white placeholder:text-white/20 focus:border-icebreaker-coral/60"
+                data-testid="input-otp"
+              />
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="w-full max-w-sm relative z-10">
-        {/* Logo */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)" }}>
-            <Flame className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight mb-1">
-            <span className="text-icebreaker-coral">Ice</span><span className="text-icebreaker-teal">breaker</span>
-          </h1>
-          <p className="text-icebreaker-muted text-sm font-medium">Bangalore's nightlife dating app</p>
-        </div>
+      {/* Bottom CTA section */}
+      <div className="w-full max-w-sm px-6 pb-10 space-y-3">
+        {step === "welcome" && (
+          <>
+            <button
+              onClick={() => setStep("phone")}
+              className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+              style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
+              data-testid="button-continue-google"
+            >
+              <User className="w-5 h-5" />
+              Continue with phone
+            </button>
+            <button
+              onClick={() => setStep("phone")}
+              className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-3 transition-all active:scale-95"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(0,207,255,0.4)" }}
+              data-testid="button-continue-phone"
+            >
+              <Smartphone className="w-5 h-5 text-icebreaker-teal" />
+              Continue with phone
+            </button>
+            <p className="text-center text-xs text-icebreaker-muted pt-1">
+              Already have an account?{" "}
+              <span className="text-white font-semibold cursor-pointer underline underline-offset-2" onClick={() => setStep("phone")}>Log in</span>
+            </p>
+          </>
+        )}
 
-        {/* Card */}
-        <div className="glassmorphic p-7">
-          {step === "phone" ? (
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-widest text-icebreaker-muted mb-2">
-                  Phone Number
-                </label>
-                <Input
-                  data-testid="input-phone"
-                  type="tel"
-                  placeholder="+91 98765 43210"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendOTP()}
-                  className="h-12 text-base bg-icebreaker-surface border-icebreaker-border text-icebreaker-text placeholder:text-icebreaker-muted"
-                />
-              </div>
-              <Button
-                data-testid="button-send-otp"
-                onClick={sendOTP}
-                disabled={loading}
-                className="w-full h-12 btn-coral text-sm"
-              >
-                {loading ? "Sending..." : "Send OTP →"}
-              </Button>
-              <p className="text-xs text-icebreaker-muted text-center leading-relaxed">
-                By continuing, you agree to our Terms & Privacy Policy
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-widest text-icebreaker-muted mb-1">
-                  Enter OTP
-                </label>
-                <p className="text-xs text-icebreaker-muted mb-3">Sent to {phone}</p>
-                <Input
-                  data-testid="input-otp"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="• • • • • •"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  onKeyDown={(e) => e.key === "Enter" && verifyOTP()}
-                  maxLength={6}
-                  className="h-12 text-2xl text-center tracking-[0.5em] font-bold bg-icebreaker-surface border-icebreaker-border text-icebreaker-text"
-                />
-              </div>
-              <Button
-                data-testid="button-verify-otp"
-                onClick={verifyOTP}
-                disabled={loading || otp.length < 6}
-                className="w-full h-12 btn-coral text-sm"
-              >
-                {loading ? "Verifying..." : "Verify & Enter →"}
-              </Button>
-              <button
-                onClick={() => { setStep("phone"); setOtp(""); }}
-                className="w-full text-xs text-icebreaker-muted hover:text-icebreaker-text transition-colors text-center"
-              >
-                ← Change phone number
-              </button>
-            </div>
-          )}
-        </div>
+        {step === "phone" && (
+          <>
+            <button
+              onClick={sendOTP}
+              disabled={loading}
+              className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
+              data-testid="button-send-otp"
+            >
+              {loading ? "Sending…" : "Send Code →"}
+            </button>
+            <button onClick={() => setStep("welcome")} className="w-full text-center text-sm text-icebreaker-muted py-2">← Back</button>
+          </>
+        )}
 
-        {/* Dev hint */}
-        <p className="text-center text-xs text-icebreaker-muted/50 mt-5">
-          Dev mode: OTP is printed in server console
-        </p>
+        {step === "otp" && (
+          <>
+            <button
+              onClick={verifyOTP}
+              disabled={loading}
+              className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-60"
+              style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
+              data-testid="button-verify-otp"
+            >
+              {loading ? "Verifying…" : "Verify & Enter →"}
+            </button>
+            <button onClick={() => setStep("phone")} className="w-full text-center text-sm text-icebreaker-muted py-2">← Change number</button>
+          </>
+        )}
       </div>
     </div>
   );
