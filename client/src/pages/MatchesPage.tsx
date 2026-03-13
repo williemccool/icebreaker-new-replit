@@ -64,10 +64,10 @@ export default function MatchesPage() {
             </div>
             <div className="text-center">
               <p className="font-bold">No matches yet</p>
-              <p className="text-xs text-icebreaker-muted mt-1">Head to Discover and start swiping!</p>
+              <p className="text-xs text-icebreaker-muted mt-1">Join a Live room or check into a Venue to meet people!</p>
             </div>
-            <Link href="/discover">
-              <button className="btn-coral text-sm">Start Discovering →</button>
+            <Link href="/rooms">
+              <button className="btn-coral text-sm">Explore Live Rooms →</button>
             </Link>
           </div>
         )}

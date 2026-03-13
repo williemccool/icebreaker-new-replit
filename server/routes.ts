@@ -490,29 +490,7 @@ import type { Express } from "express";
 
     // ============ SWIPE & MATCH ROUTES ============
     
-    // Get swipe candidates
-    app.get("/api/discover/swipe", authMiddleware, async (req: any, res) => {
-      try {
-        const limit = 20;
-        
-        // Get already swiped IDs
-        const swipedIds = await db.select({ id: swipes.swipedId })
-          .from(swipes)
-          .where(eq(swipes.swiperId, req.userId));
-        
-        const excludeIds = swipedIds.map(s => s.id);
-        excludeIds.push(req.userId);
-        
-        // Get candidates
-        const candidates = await db.select().from(users)
-          .where(sql`id NOT IN (${sql.raw(excludeIds.join(','))})`)
-          .limit(limit);
-        
-        res.json(candidates);
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
-      }
-    });
+
     
     // Swipe on user
     app.post("/api/swipe", authMiddleware, async (req: any, res) => {
@@ -604,6 +582,13 @@ import type { Express } from "express";
       try {
         const matchId = parseInt(req.params.id);
         
+        const [match] = await db.select().from(matches)
+          .where(eq(matches.id, matchId))
+          .limit(1);
+        if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+        
         const msgs = await db.select().from(messages)
           .where(eq(messages.matchId, matchId))
           .orderBy(messages.createdAt);
@@ -618,6 +603,14 @@ import type { Express } from "express";
     app.post("/api/matches/:id/messages", authMiddleware, async (req: any, res) => {
       try {
         const matchId = parseInt(req.params.id);
+        
+        const [match] = await db.select().from(matches)
+          .where(eq(matches.id, matchId))
+          .limit(1);
+        if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+        
         const { body } = req.body;
         
         const [message] = await db.insert(messages).values({

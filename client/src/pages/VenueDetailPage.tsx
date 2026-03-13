@@ -114,7 +114,7 @@ export default function VenueDetailPage() {
                 <h2 className="font-extrabold text-base">Who's Here</h2>
                 <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-icebreaker-teal" style={{ background: "rgba(0,207,255,0.15)" }}>{checkedInUsers?.length || 0}</span>
               </div>
-              <Link href="/discover">
+              <Link href="/rooms">
                 <span className="text-xs font-bold text-icebreaker-coral cursor-pointer">See all →</span>
               </Link>
             </div>

@@ -19,7 +19,7 @@ const SLIDES = [
     glow: "rgba(255,27,141,0.25)",
     label: "CHECK IN",
     title: "Meet people\nwhere you go.",
-    body: "Check into a venue tonight to see who else is there. Swipe, match, or gift a drink — all without leaving your table.",
+    body: "Check into a venue tonight to see who else is there. Connect in live rooms, match, or gift a drink — all without leaving your table.",
     cta: "Next",
     emoji: "📍"
   },
