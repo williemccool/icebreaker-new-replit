@@ -419,7 +419,7 @@ import type { Express } from "express";
         
         // Get candidates
         const candidates = await db.select().from(users)
-          .where(sql`id NOT IN (${excludeIds.join(',')})`)
+          .where(sql`id NOT IN (${sql.raw(excludeIds.join(','))})`)
           .limit(limit);
         
         res.json(candidates);
@@ -550,6 +550,30 @@ import type { Express } from "express";
     // ============ VIRTUAL ROOMS ROUTES ============
     
     // Get active rooms
+    // Get single room with participants
+    app.get("/api/rooms/:id", authMiddleware, async (req: any, res) => {
+      try {
+        const roomId = parseInt(req.params.id);
+        const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId)).limit(1);
+        if (!room) return res.status(404).json({ error: "Room not found" });
+
+        const presences = await db.select().from(roomPresence)
+          .where(and(eq(roomPresence.roomId, roomId), isNull(roomPresence.leftAt)));
+
+        const participantIds = presences.map(p => p.userId);
+        const participants = participantIds.length > 0
+          ? await db.select().from(users).where(sql`id IN (${sql.raw(participantIds.join(','))})`)
+          : [];
+
+        // Calculate minutes remaining
+        const minsLeft = Math.max(0, Math.round((new Date(room.endsAt).getTime() - Date.now()) / 60000));
+
+        res.json({ room, participants, minsLeft });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     app.get("/api/rooms", async (req, res) => {
       try {
         const { venueId } = req.query;

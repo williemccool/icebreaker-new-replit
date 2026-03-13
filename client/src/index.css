@@ -5,25 +5,25 @@
 @layer base {
   :root {
     /* ─── Icebreaker Dark Theme ─────────────────────────── */
-    --background: 226 18% 7%;        /* #0E0F13 */
+    --background: 240 14% 5%;        /* #0A0A0C */
     --foreground: 220 20% 95%;       /* #F0F2F7 */
-    --card: 224 16% 11%;             /* #181B22 */
+    --card: 240 12% 9%;              /* #141418 */
     --card-foreground: 220 20% 95%;
-    --popover: 224 16% 13%;
+    --popover: 240 12% 12%;
     --popover-foreground: 220 20% 95%;
-    --primary: 358 100% 67%;         /* Coral #FF5A5F */
+    --primary: 327 100% 55%;         /* Electric Pink #FF1B8D */
     --primary-foreground: 0 0% 100%;
     --secondary: 272 91% 65%;        /* Orchid #A855F7 */
     --secondary-foreground: 0 0% 100%;
-    --muted: 224 16% 18%;
+    --muted: 240 12% 18%;
     --muted-foreground: 224 12% 55%; /* #8A8FA8 */
-    --accent: 162 81% 44%;           /* Teal #14C8A0 */
+    --accent: 195 100% 50%;          /* Electric Cyan #00CFFF */
     --accent-foreground: 0 0% 100%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 224 14% 16%;           /* #2A2D38 */
-    --input: 224 16% 15%;
-    --ring: 358 100% 67%;
+    --border: 240 14% 17%;           /* #252530 */
+    --input: 240 12% 16%;
+    --ring: 327 100% 55%;
     --radius: 0.875rem;
   }
 
@@ -43,7 +43,7 @@
     font-feature-settings: "rlig" 1, "calt" 1, "cv11" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #0E0F13;
+    background-color: #0A0A0C;
     color: #F0F2F7;
   }
 
@@ -56,9 +56,9 @@
 
   /* ─── Scrollbar ───────────────────────────────────────── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #0E0F13; }
-  ::-webkit-scrollbar-thumb { background: #2A2D38; border-radius: 99px; }
-  ::-webkit-scrollbar-thumb:hover { background: #3A3D4A; }
+  ::-webkit-scrollbar-track { background: #0A0A0C; }
+  ::-webkit-scrollbar-thumb { background: #252530; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #35353F; }
 }
 
 @layer components {
@@ -84,6 +84,7 @@
            py-2.5 px-6 rounded-xl transition-all duration-200
            shadow-glow-teal active:scale-95;
     font-family: 'Plus Jakarta Sans', sans-serif;
+    color: #0A0A0C !important;
   }
 
   .btn-ghost-coral {
@@ -104,7 +105,7 @@
   }
 
   .glassmorphic {
-    background: rgba(24, 27, 34, 0.85);
+    background: rgba(20, 20, 24, 0.85);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -113,14 +114,21 @@
 
   /* ─── Gradient Text ────────────────────────────────────── */
   .text-gradient-coral-orchid {
-    background: linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%);
+    background: linear-gradient(135deg, #FF1B8D 0%, #A855F7 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
   .text-gradient-orchid-teal {
-    background: linear-gradient(135deg, #A855F7 0%, #14C8A0 100%);
+    background: linear-gradient(135deg, #A855F7 0%, #00CFFF 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-pink-cyan {
+    background: linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -129,8 +137,8 @@
   /* ─── Icon Badges ───────────────────────────────────────── */
   .icon-badge-coral {
     @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
-    background: linear-gradient(135deg, rgba(255,90,95,0.3) 0%, rgba(255,90,95,0.1) 100%);
-    border: 1px solid rgba(255,90,95,0.3);
+    background: linear-gradient(135deg, rgba(255,27,141,0.3) 0%, rgba(255,27,141,0.1) 100%);
+    border: 1px solid rgba(255,27,141,0.3);
   }
 
   .icon-badge-orchid {
@@ -141,19 +149,20 @@
 
   .icon-badge-teal {
     @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
-    background: linear-gradient(135deg, rgba(20,200,160,0.3) 0%, rgba(20,200,160,0.1) 100%);
-    border: 1px solid rgba(20,200,160,0.3);
+    background: linear-gradient(135deg, rgba(0,207,255,0.3) 0%, rgba(0,207,255,0.1) 100%);
+    border: 1px solid rgba(0,207,255,0.3);
   }
 
   /* ─── Number Badge ─────────────────────────────────────── */
   .num-badge-coral {
     @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0;
-    background: #FF5A5F;
+    background: #FF1B8D;
   }
 
   .num-badge-teal {
-    @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0;
-    background: #14C8A0;
+    @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0;
+    background: #00CFFF;
+    color: #0A0A0C;
   }
 
   /* ─── Tags / Pills ─────────────────────────────────────── */
@@ -188,7 +197,7 @@
   /* ─── Bottom Nav ───────────────────────────────────────── */
   .bottom-nav {
     @apply fixed bottom-0 left-0 right-0 z-50;
-    background: rgba(14, 15, 19, 0.96);
+    background: rgba(10, 10, 12, 0.97);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border-top: 1px solid rgba(255,255,255,0.06);
@@ -208,8 +217,8 @@
   }
 
   .bottom-nav-item.active .nav-icon {
-    color: #FF5A5F;
-    filter: drop-shadow(0 0 6px rgba(255,90,95,0.6));
+    color: #FF1B8D;
+    filter: drop-shadow(0 0 8px rgba(255,27,141,0.7));
   }
 
   /* ─── Input overrides ──────────────────────────────────── */
@@ -220,9 +229,9 @@
   input[type="date"],
   textarea,
   select {
-    background: #181B22 !important;
+    background: #141418 !important;
     color: #F0F2F7 !important;
-    border-color: #2A2D38 !important;
+    border-color: #252530 !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
   }
 
@@ -231,8 +240,8 @@
   input[type="email"]:focus,
   input[type="date"]:focus,
   textarea:focus {
-    border-color: rgba(255,90,95,0.6) !important;
-    box-shadow: 0 0 0 2px rgba(255,90,95,0.15) !important;
+    border-color: rgba(255,27,141,0.6) !important;
+    box-shadow: 0 0 0 2px rgba(255,27,141,0.15) !important;
     outline: none !important;
   }
 
@@ -243,17 +252,17 @@
 
   /* ─── Progress bar ─────────────────────────────────────── */
   [role="progressbar"] {
-    background: #2A2D38 !important;
+    background: #252530 !important;
   }
 
   [role="progressbar"] > div {
-    background: linear-gradient(90deg, #FF5A5F 0%, #A855F7 100%) !important;
+    background: linear-gradient(90deg, #FF1B8D 0%, #A855F7 100%) !important;
   }
 
   /* ─── Sticky header ────────────────────────────────────── */
   .page-header {
     @apply sticky top-0 z-10 border-b border-icebreaker-border p-4;
-    background: rgba(14, 15, 19, 0.96);
+    background: rgba(10, 10, 12, 0.97);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
   }
@@ -261,20 +270,20 @@
   /* ─── Glow divider ─────────────────────────────────────── */
   .divider-glow {
     height: 1px;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,90,95,0.4) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255,27,141,0.4) 50%, transparent 100%);
   }
 }
 
 /* ─── Shadcn component dark overrides ────────────────────── */
 .shadcn-card, [class*="bg-card"] {
-  background-color: #181B22 !important;
+  background-color: #141418 !important;
   color: #F0F2F7 !important;
 }
 
 /* Select dropdown dark */
 [data-radix-popper-content-wrapper] > div {
-  background: #1F232C !important;
-  border: 1px solid #2A2D38 !important;
+  background: #1E1E25 !important;
+  border: 1px solid #252530 !important;
   color: #F0F2F7 !important;
 }
 
@@ -284,8 +293,8 @@
 
 [data-radix-select-viewport] [role="option"]:hover,
 [data-radix-select-viewport] [role="option"][data-highlighted] {
-  background: rgba(255,90,95,0.12) !important;
-  color: #FF5A5F !important;
+  background: rgba(255,27,141,0.12) !important;
+  color: #FF1B8D !important;
 }
 
 /* Toast dark */

@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Users, Clock, Crown, MessageSquare } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function RoomsPage() {
+  const [, navigate] = useLocation();
   const { data: rooms, isLoading } = useQuery({
     queryKey: ["/api/rooms"],
     queryFn: async () => {
@@ -67,7 +69,7 @@ export default function RoomsPage() {
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${pct}%`,
-                        background: isFull ? "#FF5A5F" : "linear-gradient(90deg, #14C8A0 0%, #A855F7 100%)"
+                        background: isFull ? "#FF1B8D" : "linear-gradient(90deg, #00CFFF 0%, #A855F7 100%)"
                       }}
                     />
                   </div>
@@ -75,8 +77,9 @@ export default function RoomsPage() {
 
                 <Button
                   size="sm"
-                  className={`w-full h-9 text-sm font-bold ${isFull ? "opacity-50 cursor-not-allowed bg-icebreaker-surface border border-icebreaker-border text-icebreaker-muted" : "btn-teal"}`}
+                  className={`w-full h-9 text-sm font-bold ${isFull ? "opacity-50 cursor-not-allowed bg-icebreaker-surface border border-icebreaker-border text-icebreaker-muted" : "btn-coral"}`}
                   disabled={isFull}
+                  onClick={() => !isFull && navigate(`/rooms/${room.id}`)}
                   data-testid={`button-join-room-${room.id}`}
                 >
                   <MessageSquare className="w-4 h-4 mr-2" />
