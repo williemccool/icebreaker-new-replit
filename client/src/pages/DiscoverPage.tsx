@@ -1,164 +1,179 @@
 import { useState } from "react";
-  import { useQuery, useMutation } from "@tanstack/react-query";
-  import { Card } from "@/components/ui/card";
-  import { Button } from "@/components/ui/button";
-  import { Heart, X, MapPin, Briefcase } from "lucide-react";
-  import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Heart, X, MapPin, Sparkles, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 
-  export default function DiscoverPage() {
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const { toast } = useToast();
+export default function DiscoverPage() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const { toast } = useToast();
 
-    const { data: candidates, refetch } = useQuery({
-      queryKey: ["/api/discover/swipe"],
-      queryFn: async () => {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/discover/swipe", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        return res.json();
-      }
-    });
-
-    const swipeMutation = useMutation({
-      mutationFn: async ({ swipedId, liked }: { swipedId: number; liked: boolean }) => {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/swipe", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ swipedId, liked })
-        });
-        return res.json();
-      },
-      onSuccess: (data) => {
-        if (data.matched) {
-          toast({
-            title: "🎉 It's a match!",
-            description: "You can now start chatting"
-          });
-        }
-        setCurrentIndex(prev => prev + 1);
-        if (currentIndex >= (candidates?.length || 0) - 3) {
-          refetch();
-        }
-      }
-    });
-
-    const currentUser = candidates?.[currentIndex];
-
-    const handleSwipe = (liked: boolean) => {
-      if (currentUser) {
-        swipeMutation.mutate({ swipedId: currentUser.id, liked });
-      }
-    };
-
-    if (!candidates || candidates.length === 0) {
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <Heart className="w-16 h-16 mx-auto mb-4 opacity-20" />
-            <p className="text-gray-400">No more profiles to show</p>
-            <Button onClick={() => refetch()} className="mt-4 btn-coral">
-              Refresh
-            </Button>
-          </div>
-        </div>
-      );
+  const { data: candidates, isLoading, refetch } = useQuery({
+    queryKey: ["/api/discover/swipe"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/discover/swipe", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.json();
     }
+  });
 
-    if (!currentUser) {
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-gray-400">Loading...</p>
-          </div>
-        </div>
-      );
+  const swipeMutation = useMutation({
+    mutationFn: async ({ swipedId, liked }: { swipedId: number; liked: boolean }) => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/swipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ swipedId, liked })
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.matched) {
+        toast({ title: "🎉 It's a Match!", description: "You can now start chatting" });
+        queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      }
+      setCurrentIndex(prev => prev + 1);
+      if (currentIndex >= (candidates?.length || 0) - 3) refetch();
     }
+  });
 
+  const currentUser = candidates?.[currentIndex];
+  const age = currentUser?.dob
+    ? new Date().getFullYear() - new Date(currentUser.dob).getFullYear()
+    : null;
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen pb-20 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <Card className="glassmorphic overflow-hidden relative h-[600px]">
-            {/* Profile Image */}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80">
-              {currentUser.photos?.[0] ? (
-                <img 
-                  src={currentUser.photos[0]} 
-                  alt={currentUser.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-icebreaker-coral to-icebreaker-orchid flex items-center justify-center">
-                  <span className="text-8xl font-bold text-white">
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-coral-orchid animate-pulse" />
+          <span className="text-icebreaker-muted text-sm font-semibold">Finding people nearby...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!candidates || candidates.length === 0 || !currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-5 text-center max-w-xs">
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.15) 0%, rgba(168,85,247,0.15) 100%)" }}>
+            <Heart className="w-10 h-10 text-icebreaker-coral" />
+          </div>
+          <div>
+            <h3 className="font-extrabold text-lg tracking-tight">You're all caught up!</h3>
+            <p className="text-sm text-icebreaker-muted mt-1">No more profiles to show right now.</p>
+          </div>
+          <Button onClick={() => { setCurrentIndex(0); refetch(); }} className="btn-coral">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen pb-24 flex flex-col">
+      {/* Header */}
+      <div className="page-header">
+        <div className="max-w-lg mx-auto flex items-center justify-between">
+          <h1 className="text-xl font-extrabold tracking-tight">Discover</h1>
+          <div className="flex items-center gap-1.5 text-xs text-icebreaker-muted font-semibold">
+            <span>{currentIndex + 1}</span>
+            <span>/</span>
+            <span>{candidates.length}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm">
+          {/* Card */}
+          <div className="relative h-[520px] rounded-2xl overflow-hidden shadow-card" data-testid="swipe-card">
+            {/* Photo / Gradient placeholder */}
+            {currentUser.photos?.[0] ? (
+              <img src={currentUser.photos[0]} alt={currentUser.name} className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{ background: `linear-gradient(160deg, #FF5A5F 0%, #A855F7 50%, #14C8A0 100%)` }}
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-9xl font-extrabold text-white/30">
                     {currentUser.name?.[0] || "?"}
                   </span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Profile Info */}
-            <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-              <h2 className="text-3xl font-bold mb-2">
-                {currentUser.name}, {new Date().getFullYear() - new Date(currentUser.dob).getFullYear()}
-              </h2>
-              
-              {currentUser.bio && (
-                <p className="text-sm mb-3 line-clamp-2">{currentUser.bio}</p>
-              )}
+            {/* Gradient overlay */}
+            <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.9) 100%)" }} />
 
-              <div className="flex items-center gap-4 text-sm mb-3">
-                {currentUser.city && (
-                  <div className="flex items-center gap-1">
-                    <MapPin className="w-4 h-4" />
-                    {currentUser.city}
-                  </div>
-                )}
+            {/* Info */}
+            <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
+              <div className="flex items-end justify-between">
+                <div>
+                  <h2 className="text-2xl font-extrabold tracking-tight">
+                    {currentUser.name}{age ? `, ${age}` : ""}
+                  </h2>
+                  {currentUser.city && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <MapPin className="w-3.5 h-3.5 opacity-70" />
+                      <span className="text-sm opacity-80">{currentUser.city}</span>
+                    </div>
+                  )}
+                  {currentUser.bio && (
+                    <p className="text-sm opacity-75 mt-2 line-clamp-2 leading-relaxed">{currentUser.bio}</p>
+                  )}
+                </div>
               </div>
 
               {currentUser.interests && currentUser.interests.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {currentUser.interests.slice(0, 3).map((interest: string) => (
-                    <span 
-                      key={interest}
-                      className="px-3 py-1 rounded-full bg-white/20 backdrop-blur text-xs"
-                    >
-                      {interest}
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {currentUser.interests.slice(0, 3).map((i: string) => (
+                    <span key={i} className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: "rgba(255,255,255,0.15)", backdropFilter: "blur(10px)" }}>
+                      {i}
                     </span>
                   ))}
                 </div>
               )}
             </div>
-          </Card>
-
-          {/* Swipe Buttons */}
-          <div className="flex justify-center gap-6 mt-6">
-            <Button
-              onClick={() => handleSwipe(false)}
-              size="lg"
-              variant="outline"
-              className="w-16 h-16 rounded-full border-red-500 text-red-500 hover:bg-red-500/10"
-            >
-              <X className="w-8 h-8" />
-            </Button>
-
-            <Button
-              onClick={() => handleSwipe(true)}
-              size="lg"
-              className="w-16 h-16 rounded-full btn-coral"
-            >
-              <Heart className="w-8 h-8 fill-current" />
-            </Button>
           </div>
 
-          <p className="text-center text-sm text-gray-400 mt-4">
-            {currentIndex + 1} / {candidates.length}
-          </p>
+          {/* Action Buttons */}
+          <div className="flex items-center justify-center gap-5 mt-5">
+            <button
+              onClick={() => swipeMutation.mutate({ swipedId: currentUser.id, liked: false })}
+              disabled={swipeMutation.isPending}
+              className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-90 border-2 border-red-500/40 hover:border-red-500 hover:bg-red-500/10"
+              data-testid="button-swipe-left"
+            >
+              <X className="w-6 h-6 text-red-400" />
+            </button>
+
+            <button
+              onClick={() => swipeMutation.mutate({ swipedId: currentUser.id, liked: true })}
+              disabled={swipeMutation.isPending}
+              className="w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-glow-coral"
+              style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }}
+              data-testid="button-swipe-right"
+            >
+              <Heart className="w-7 h-7 text-white fill-white" />
+            </button>
+
+            <button
+              className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-90 border-2 border-icebreaker-orchid/40 hover:border-icebreaker-orchid hover:bg-icebreaker-orchid/10"
+              data-testid="button-superlike"
+            >
+              <Sparkles className="w-6 h-6 text-icebreaker-orchid" />
+            </button>
+          </div>
         </div>
       </div>
-    );
-  }
-  
+    </div>
+  );
+}

@@ -1,57 +1,294 @@
 @tailwind base;
-  @tailwind components;
-  @tailwind utilities;
+@tailwind components;
+@tailwind utilities;
 
-  @layer base {
-    :root {
-      --background: 210 10% 8%; /* #121316 */
-      --foreground: 220 10% 91%; /* #E6E8EC */
-      --card: 216 12% 12%; /* #1C1F24 */
-      --card-foreground: 220 10% 91%;
-      --popover: 216 12% 12%;
-      --popover-foreground: 220 10% 91%;
-      --primary: 6 100% 70%; /* Coral #FF6B6B */
-      --primary-foreground: 0 0% 100%;
-      --secondary: 270 58% 70%; /* Orchid #B06EFF */
-      --secondary-foreground: 0 0% 100%;
-      --muted: 216 12% 16%;
-      --muted-foreground: 220 6% 60%;
-      --accent: 163 64% 48%; /* Success #27C4A1 */
-      --accent-foreground: 0 0% 100%;
-      --destructive: 0 84.2% 60.2%;
-      --destructive-foreground: 0 0% 98%;
-      --border: 216 12% 20%;
-      --input: 216 12% 20%;
-      --ring: 6 100% 70%;
-      --radius: 0.5rem;
-    }
+@layer base {
+  :root {
+    /* ─── Icebreaker Dark Theme ─────────────────────────── */
+    --background: 226 18% 7%;        /* #0E0F13 */
+    --foreground: 220 20% 95%;       /* #F0F2F7 */
+    --card: 224 16% 11%;             /* #181B22 */
+    --card-foreground: 220 20% 95%;
+    --popover: 224 16% 13%;
+    --popover-foreground: 220 20% 95%;
+    --primary: 358 100% 67%;         /* Coral #FF5A5F */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 272 91% 65%;        /* Orchid #A855F7 */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 224 16% 18%;
+    --muted-foreground: 224 12% 55%; /* #8A8FA8 */
+    --accent: 162 81% 44%;           /* Teal #14C8A0 */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 224 14% 16%;           /* #2A2D38 */
+    --input: 224 16% 15%;
+    --ring: 358 100% 67%;
+    --radius: 0.875rem;
   }
 
-  @layer base {
-    * {
-      @apply border-border;
-    }
-    body {
-      @apply bg-icebreaker-bg text-icebreaker-text;
-      font-feature-settings: "rlig" 1, "calt" 1;
-    }
+  /* Force dark mode on everything */
+  html {
+    color-scheme: dark;
   }
 
-  @layer components {
-    .btn-coral {
-      @apply bg-icebreaker-coral hover:bg-icebreaker-coral/90 text-white font-semibold py-2 px-6 rounded-lg transition-all;
-    }
-    
-    .btn-orchid {
-      @apply bg-icebreaker-orchid hover:bg-icebreaker-orchid/90 text-white font-semibold py-2 px-6 rounded-lg transition-all;
-    }
-    
-    .card-dark {
-      @apply bg-icebreaker-surface border border-gray-800 rounded-xl p-6;
-    }
-    
-    .glassmorphic {
-      @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl;
-    }
+  * {
+    @apply border-border;
+    box-sizing: border-box;
   }
-  
+
+  body {
+    @apply bg-icebreaker-bg text-icebreaker-text antialiased;
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "cv11" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #0E0F13;
+    color: #F0F2F7;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #F0F2F7;
+  }
+
+  /* ─── Scrollbar ───────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #0E0F13; }
+  ::-webkit-scrollbar-thumb { background: #2A2D38; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3A3D4A; }
+}
+
+@layer components {
+
+  /* ─── Buttons ──────────────────────────────────────────── */
+  .btn-coral {
+    @apply bg-icebreaker-coral hover:bg-icebreaker-coral/90 text-white font-bold
+           py-2.5 px-6 rounded-xl transition-all duration-200
+           shadow-glow-coral active:scale-95;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  .btn-orchid {
+    @apply bg-icebreaker-orchid hover:bg-icebreaker-orchid/90 text-white font-bold
+           py-2.5 px-6 rounded-xl transition-all duration-200
+           shadow-glow-orchid active:scale-95;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .btn-teal {
+    @apply bg-icebreaker-teal hover:bg-icebreaker-teal/90 text-white font-bold
+           py-2.5 px-6 rounded-xl transition-all duration-200
+           shadow-glow-teal active:scale-95;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .btn-ghost-coral {
+    @apply text-icebreaker-coral border border-icebreaker-coral/40
+           hover:bg-icebreaker-coral/10 font-semibold
+           py-2.5 px-6 rounded-xl transition-all duration-200;
+  }
+
+  /* ─── Cards ────────────────────────────────────────────── */
+  .card-dark {
+    @apply bg-icebreaker-surface border border-icebreaker-border
+           rounded-2xl p-5 shadow-card;
+  }
+
+  .card-elevated {
+    @apply bg-icebreaker-elevated border border-icebreaker-border
+           rounded-2xl p-5 shadow-card;
+  }
+
+  .glassmorphic {
+    background: rgba(24, 27, 34, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1.25rem;
+  }
+
+  /* ─── Gradient Text ────────────────────────────────────── */
+  .text-gradient-coral-orchid {
+    background: linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-orchid-teal {
+    background: linear-gradient(135deg, #A855F7 0%, #14C8A0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ─── Icon Badges ───────────────────────────────────────── */
+  .icon-badge-coral {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
+    background: linear-gradient(135deg, rgba(255,90,95,0.3) 0%, rgba(255,90,95,0.1) 100%);
+    border: 1px solid rgba(255,90,95,0.3);
+  }
+
+  .icon-badge-orchid {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
+    background: linear-gradient(135deg, rgba(168,85,247,0.3) 0%, rgba(168,85,247,0.1) 100%);
+    border: 1px solid rgba(168,85,247,0.3);
+  }
+
+  .icon-badge-teal {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0;
+    background: linear-gradient(135deg, rgba(20,200,160,0.3) 0%, rgba(20,200,160,0.1) 100%);
+    border: 1px solid rgba(20,200,160,0.3);
+  }
+
+  /* ─── Number Badge ─────────────────────────────────────── */
+  .num-badge-coral {
+    @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0;
+    background: #FF5A5F;
+  }
+
+  .num-badge-teal {
+    @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0;
+    background: #14C8A0;
+  }
+
+  /* ─── Tags / Pills ─────────────────────────────────────── */
+  .tag-coral {
+    @apply text-xs font-bold uppercase tracking-widest text-icebreaker-coral;
+  }
+
+  .tag-teal {
+    @apply text-xs font-bold uppercase tracking-widest text-icebreaker-teal;
+  }
+
+  .pill {
+    @apply px-3 py-1 rounded-full text-xs font-semibold border;
+  }
+
+  .pill-coral {
+    @apply pill bg-icebreaker-coral/15 border-icebreaker-coral/30 text-icebreaker-coral;
+  }
+
+  .pill-orchid {
+    @apply pill bg-icebreaker-orchid/15 border-icebreaker-orchid/30 text-icebreaker-orchid;
+  }
+
+  .pill-teal {
+    @apply pill bg-icebreaker-teal/15 border-icebreaker-teal/30 text-icebreaker-teal;
+  }
+
+  .pill-neutral {
+    @apply pill bg-white/5 border-white/10 text-icebreaker-muted;
+  }
+
+  /* ─── Bottom Nav ───────────────────────────────────────── */
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-50;
+    background: rgba(14, 15, 19, 0.96);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .bottom-nav-item {
+    @apply flex flex-col items-center gap-1 py-3 px-2 transition-all duration-200
+           text-icebreaker-muted cursor-pointer select-none;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .bottom-nav-item.active {
+    @apply text-icebreaker-coral;
+  }
+
+  .bottom-nav-item.active .nav-icon {
+    color: #FF5A5F;
+    filter: drop-shadow(0 0 6px rgba(255,90,95,0.6));
+  }
+
+  /* ─── Input overrides ──────────────────────────────────── */
+  input[type="text"],
+  input[type="tel"],
+  input[type="email"],
+  input[type="password"],
+  input[type="date"],
+  textarea,
+  select {
+    background: #181B22 !important;
+    color: #F0F2F7 !important;
+    border-color: #2A2D38 !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+  }
+
+  input[type="text"]:focus,
+  input[type="tel"]:focus,
+  input[type="email"]:focus,
+  input[type="date"]:focus,
+  textarea:focus {
+    border-color: rgba(255,90,95,0.6) !important;
+    box-shadow: 0 0 0 2px rgba(255,90,95,0.15) !important;
+    outline: none !important;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #8A8FA8 !important;
+  }
+
+  /* ─── Progress bar ─────────────────────────────────────── */
+  [role="progressbar"] {
+    background: #2A2D38 !important;
+  }
+
+  [role="progressbar"] > div {
+    background: linear-gradient(90deg, #FF5A5F 0%, #A855F7 100%) !important;
+  }
+
+  /* ─── Sticky header ────────────────────────────────────── */
+  .page-header {
+    @apply sticky top-0 z-10 border-b border-icebreaker-border p-4;
+    background: rgba(14, 15, 19, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* ─── Glow divider ─────────────────────────────────────── */
+  .divider-glow {
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,90,95,0.4) 50%, transparent 100%);
+  }
+}
+
+/* ─── Shadcn component dark overrides ────────────────────── */
+.shadcn-card, [class*="bg-card"] {
+  background-color: #181B22 !important;
+  color: #F0F2F7 !important;
+}
+
+/* Select dropdown dark */
+[data-radix-popper-content-wrapper] > div {
+  background: #1F232C !important;
+  border: 1px solid #2A2D38 !important;
+  color: #F0F2F7 !important;
+}
+
+[data-radix-select-viewport] [role="option"] {
+  color: #F0F2F7 !important;
+}
+
+[data-radix-select-viewport] [role="option"]:hover,
+[data-radix-select-viewport] [role="option"][data-highlighted] {
+  background: rgba(255,90,95,0.12) !important;
+  color: #FF5A5F !important;
+}
+
+/* Toast dark */
+[data-sonner-toast], [data-state] {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+}

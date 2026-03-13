@@ -1,186 +1,281 @@
 import { Link } from "wouter";
-  import { Button } from "@/components/ui/button";
-  import { Card } from "@/components/ui/card";
-  import { MapPin, Users, Calendar, Sparkles, Award, Heart } from "lucide-react";
-  import { useQuery } from "@tanstack/react-query";
-  import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { MapPin, Users, Calendar, Sparkles, Zap, Trophy } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Flame } from "lucide-react";
 
-  export default function HomePage() {
-    const [user, setUser] = useState<any>(null);
+export default function HomePage() {
+  const [user, setUser] = useState<any>(null);
 
-    useEffect(() => {
-      const userData = localStorage.getItem("user");
-      if (userData) setUser(JSON.parse(userData));
-    }, []);
+  useEffect(() => {
+    const userData = localStorage.getItem("user");
+    if (userData) setUser(JSON.parse(userData));
+  }, []);
 
-    const { data: wallet } = useQuery({
-      queryKey: ["/api/user/me"],
-      queryFn: async () => {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/user/me", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        return res.json();
-      }
-    });
+  const { data: walletData } = useQuery({
+    queryKey: ["/api/user/me"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/user/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.json();
+    }
+  });
 
-    return (
-      <div className="min-h-screen pb-20">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-icebreaker-bg/95 backdrop-blur-lg border-b border-gray-800 p-4">
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
-            <div>
-              <h1 className="text-2xl font-bold">
-                <span className="text-icebreaker-coral">Ice</span>
-                <span className="text-icebreaker-orchid">breaker</span>
-              </h1>
+  const { data: venues } = useQuery({
+    queryKey: ["/api/venues"],
+    queryFn: async () => {
+      const res = await fetch("/api/venues?city=Bangalore");
+      return res.json();
+    }
+  });
+
+  const { data: events } = useQuery({
+    queryKey: ["/api/events"],
+    queryFn: async () => {
+      const res = await fetch("/api/events?city=Bangalore");
+      return res.json();
+    }
+  });
+
+  const hotVenues = venues?.filter((v: any) => v.partner)?.slice(0, 3) || [];
+  const nextEvent = events?.[0];
+
+  return (
+    <div className="min-h-screen pb-24">
+      {/* Header */}
+      <div className="page-header">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }}>
+              <Flame className="w-4 h-4 text-white" />
             </div>
-            <div className="flex items-center gap-4">
-              <Link href="/profile">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-icebreaker-surface">
-                  <Sparkles className="w-4 h-4 text-icebreaker-coral" />
-                  <span className="font-semibold">{wallet?.wallet?.balance || 0}</span>
-                  <span className="text-xs text-gray-400">Cubes</span>
-                </div>
-              </Link>
-              <Link href="/profile">
-                <div className="w-10 h-10 rounded-full bg-icebreaker-orchid flex items-center justify-center font-semibold">
-                  {user?.name?.[0] || "U"}
-                </div>
-              </Link>
-            </div>
+            <h1 className="text-xl font-extrabold tracking-tight">
+              <span className="text-icebreaker-coral">Ice</span><span className="text-icebreaker-orchid">breaker</span>
+            </h1>
           </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto p-4 space-y-6">
-          {/* Welcome Banner */}
-          <Card className="glassmorphic p-6 bg-gradient-to-r from-icebreaker-coral/20 to-icebreaker-orchid/20 border-none">
-            <h2 className="text-2xl font-bold mb-2">Welcome back, {user?.name || "there"}!</h2>
-            <p className="text-gray-300">Ready to make tonight unforgettable?</p>
-          </Card>
-
-          {/* Quick Actions */}
-          <div className="grid grid-cols-2 gap-4">
-            <Link href="/venues">
-              <Card className="card-dark hover:border-icebreaker-coral transition-colors cursor-pointer p-6 text-center">
-                <MapPin className="w-8 h-8 mx-auto mb-2 text-icebreaker-coral" />
-                <h3 className="font-semibold">Check In</h3>
-                <p className="text-xs text-gray-400 mt-1">See who's out</p>
-              </Card>
-            </Link>
-
-            <Link href="/rooms">
-              <Card className="card-dark hover:border-icebreaker-orchid transition-colors cursor-pointer p-6 text-center">
-                <Users className="w-8 h-8 mx-auto mb-2 text-icebreaker-orchid" />
-                <h3 className="font-semibold">Virtual Rooms</h3>
-                <p className="text-xs text-gray-400 mt-1">Join now</p>
-              </Card>
-            </Link>
-
-            <Link href="/discover">
-              <Card className="card-dark hover:border-icebreaker-coral transition-colors cursor-pointer p-6 text-center">
-                <Heart className="w-8 h-8 mx-auto mb-2 text-icebreaker-coral" />
-                <h3 className="font-semibold">Discover</h3>
-                <p className="text-xs text-gray-400 mt-1">Swipe & match</p>
-              </Card>
-            </Link>
-
-            <Link href="/events">
-              <Card className="card-dark hover:border-icebreaker-success transition-colors cursor-pointer p-6 text-center">
-                <Calendar className="w-8 h-8 mx-auto mb-2 text-icebreaker-success" />
-                <h3 className="font-semibold">Events</h3>
-                <p className="text-xs text-gray-400 mt-1">Upcoming mixers</p>
-              </Card>
-            </Link>
-          </div>
-
-          {/* Progress & Gamification */}
-          <Card className="card-dark">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">Your Progress</h3>
-              <Link href="/quests">
-                <Button variant="ghost" size="sm">View All</Button>
-              </Link>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span>Level {user?.level || 1}</span>
-                  <span>{user?.xp || 0} XP</span>
-                </div>
-                <div className="h-2 bg-icebreaker-surface rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-icebreaker-coral to-icebreaker-orchid"
-                    style={{ width: `${((user?.xp || 0) % 100)}%` }}
-                  />
-                </div>
+          <div className="flex items-center gap-3">
+            <Link href="/quests">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-icebreaker-surface border border-icebreaker-border cursor-pointer" data-testid="cubes-balance">
+                <Sparkles className="w-3.5 h-3.5 text-icebreaker-coral" />
+                <span className="font-bold text-sm">{walletData?.wallet?.balance ?? "—"}</span>
+                <span className="text-xs text-icebreaker-muted">Cubes</span>
               </div>
-
-              <Link href="/leaderboard">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-icebreaker-surface hover:bg-icebreaker-surface/80 transition-colors cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <Award className="w-5 h-5 text-icebreaker-warning" />
-                    <span className="font-medium">Leaderboard</span>
-                  </div>
-                  <span className="text-sm text-gray-400">→</span>
-                </div>
-              </Link>
-            </div>
-          </Card>
-
-          {/* Recent Matches */}
-          <Card className="card-dark">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">Recent Matches</h3>
-              <Link href="/matches">
-                <Button variant="ghost" size="sm">View All</Button>
-              </Link>
-            </div>
-            <div className="text-center text-gray-400 py-8">
-              <Heart className="w-12 h-12 mx-auto mb-2 opacity-20" />
-              <p>Start swiping to see your matches</p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Bottom Navigation */}
-        <div className="fixed bottom-0 left-0 right-0 bg-icebreaker-surface border-t border-gray-800 px-4 py-2">
-          <div className="flex justify-around items-center max-w-7xl mx-auto">
-            <Link href="/">
-              <Button variant="ghost" size="sm" className="flex-col h-auto py-2">
-                <MapPin className="w-5 h-5 mb-1" />
-                <span className="text-xs">Home</span>
-              </Button>
-            </Link>
-            <Link href="/discover">
-              <Button variant="ghost" size="sm" className="flex-col h-auto py-2">
-                <Heart className="w-5 h-5 mb-1" />
-                <span className="text-xs">Discover</span>
-              </Button>
-            </Link>
-            <Link href="/rooms">
-              <Button variant="ghost" size="sm" className="flex-col h-auto py-2">
-                <Users className="w-5 h-5 mb-1" />
-                <span className="text-xs">Rooms</span>
-              </Button>
-            </Link>
-            <Link href="/matches">
-              <Button variant="ghost" size="sm" className="flex-col h-auto py-2">
-                <Sparkles className="w-5 h-5 mb-1" />
-                <span className="text-xs">Matches</span>
-              </Button>
             </Link>
             <Link href="/profile">
-              <Button variant="ghost" size="sm" className="flex-col h-auto py-2">
-                <Award className="w-5 h-5 mb-1" />
-                <span className="text-xs">Profile</span>
-              </Button>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white cursor-pointer" style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }} data-testid="avatar-header">
+                {user?.name?.[0] || "U"}
+              </div>
             </Link>
           </div>
         </div>
       </div>
-    );
-  }
-  
+
+      <div className="max-w-lg mx-auto p-4 space-y-6">
+        {/* Welcome */}
+        <div>
+          <p className="text-icebreaker-muted text-sm font-medium">Good evening 👋</p>
+          <h2 className="text-2xl font-extrabold tracking-tight mt-0.5">
+            {user?.name ? `Hey, ${user.name.split(" ")[0]}` : "Welcome back"}
+          </h2>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 gap-3">
+          <Link href="/venues">
+            <div className="card-dark cursor-pointer hover:border-icebreaker-coral/50 transition-all group" data-testid="quick-action-venues">
+              <div className="icon-badge-coral mb-3">
+                <MapPin className="w-5 h-5 text-icebreaker-coral" />
+              </div>
+              <h3 className="font-bold text-sm">Check In</h3>
+              <p className="text-xs text-icebreaker-muted mt-0.5">Find venues near you</p>
+            </div>
+          </Link>
+          <Link href="/rooms">
+            <div className="card-dark cursor-pointer hover:border-icebreaker-teal/50 transition-all group" data-testid="quick-action-rooms">
+              <div className="icon-badge-teal mb-3">
+                <Users className="w-5 h-5 text-icebreaker-teal" />
+              </div>
+              <h3 className="font-bold text-sm">Virtual Rooms</h3>
+              <p className="text-xs text-icebreaker-muted mt-0.5">Meet people digitally</p>
+            </div>
+          </Link>
+          <Link href="/discover">
+            <div className="card-dark cursor-pointer hover:border-icebreaker-coral/50 transition-all group" data-testid="quick-action-discover">
+              <div className="icon-badge-orchid mb-3">
+                <Zap className="w-5 h-5 text-icebreaker-orchid" />
+              </div>
+              <h3 className="font-bold text-sm">Discover</h3>
+              <p className="text-xs text-icebreaker-muted mt-0.5">Swipe & match</p>
+            </div>
+          </Link>
+          <Link href="/events">
+            <div className="card-dark cursor-pointer hover:border-icebreaker-coral/50 transition-all group" data-testid="quick-action-events">
+              <div className="icon-badge-coral mb-3">
+                <Calendar className="w-5 h-5 text-icebreaker-coral" />
+              </div>
+              <h3 className="font-bold text-sm">Events</h3>
+              <p className="text-xs text-icebreaker-muted mt-0.5">Speed dating & mixers</p>
+            </div>
+          </Link>
+        </div>
+
+        {/* How it Works */}
+        <div>
+          <h3 className="text-base font-extrabold mb-3 tracking-tight">How Icebreaker Works</h3>
+          <div className="grid grid-cols-1 gap-3">
+            {/* Physical Check-in */}
+            <div className="card-dark">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="icon-badge-coral">
+                  <MapPin className="w-5 h-5 text-icebreaker-coral" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-base tracking-tight">Physical Check-in</h4>
+                  <p className="text-xs text-icebreaker-muted mt-1 leading-relaxed">
+                    Already at the venue? Check in to see the profile of everyone around you right now.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { n: 1, title: "See who's here", desc: "Browse active profiles in the room." },
+                  { n: 2, title: "Spot & Approach", desc: "Send a digital wave or just walk over." },
+                  { n: 3, title: "Meet in the Zone", desc: "Head to the designated Icebreaker Zone." },
+                ].map(({ n, title, desc }) => (
+                  <div key={n} className="flex items-start gap-3">
+                    <div className="num-badge-coral mt-0.5">{n}</div>
+                    <div>
+                      <p className="text-sm font-bold">{title}</p>
+                      <p className="text-xs text-icebreaker-muted">{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="divider-glow mt-4 mb-3" />
+              <div className="flex items-center gap-2">
+                <Zap className="w-3 h-3 text-icebreaker-coral" />
+                <span className="tag-coral">Best for spontaneous vibes</span>
+              </div>
+            </div>
+
+            {/* Virtual Rooms */}
+            <div className="card-dark">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="icon-badge-teal">
+                  <Users className="w-5 h-5 text-icebreaker-teal" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-base tracking-tight">Join Virtual Room</h4>
+                  <p className="text-xs text-icebreaker-muted mt-1 leading-relaxed">
+                    Match and chat digitally with people at the venue before you meet face-to-face.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { n: 1, title: "Enter the Room", desc: "Join the venue's exclusive digital space." },
+                  { n: 2, title: "Match & Chat", desc: "Break the ice online first." },
+                  { n: 3, title: "Meet & Get Rewards", desc: "Meet IRL at the venue to unlock 50% off drinks.", coral: true },
+                ].map(({ n, title, desc, coral }) => (
+                  <div key={n} className="flex items-start gap-3">
+                    <div className="num-badge-teal mt-0.5">{n}</div>
+                    <div>
+                      <p className="text-sm font-bold">{title}</p>
+                      <p className="text-xs text-icebreaker-muted">
+                        {coral ? (
+                          <>{desc.split("50% off drinks")[0]}<span className="text-icebreaker-coral font-semibold">50% off drinks</span>{desc.split("50% off drinks")[1]}</>
+                        ) : desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="divider-glow mt-4 mb-3" />
+              <div className="flex items-center gap-2">
+                <Users className="w-3 h-3 text-icebreaker-teal" />
+                <span className="tag-teal">Best for breaking the ice safely</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Hot Venues */}
+        {hotVenues.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-extrabold tracking-tight">🔥 Hot Tonight</h3>
+              <Link href="/venues">
+                <span className="text-xs text-icebreaker-coral font-semibold cursor-pointer">See all →</span>
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {hotVenues.map((venue: any) => (
+                <Link key={venue.id} href={`/venues/${venue.id}`}>
+                  <div className="card-dark hover:border-icebreaker-coral/40 transition-all cursor-pointer flex items-center gap-3 py-3" data-testid={`venue-card-${venue.id}`}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.2) 0%, rgba(168,85,247,0.2) 100%)" }}>
+                      <MapPin className="w-5 h-5 text-icebreaker-coral" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm truncate">{venue.name}</p>
+                      <p className="text-xs text-icebreaker-muted">{venue.area} · {venue.type}</p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-icebreaker-teal animate-pulse" />
+                      <span className="text-xs font-bold text-icebreaker-teal">{venue.peopleHere || 0}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Next Event */}
+        {nextEvent && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-extrabold tracking-tight">🎉 Upcoming Event</h3>
+              <Link href="/events">
+                <span className="text-xs text-icebreaker-coral font-semibold cursor-pointer">See all →</span>
+              </Link>
+            </div>
+            <Link href="/events">
+              <div className="card-dark cursor-pointer hover:border-icebreaker-coral/40 transition-all" data-testid="upcoming-event-card">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <span className="pill-coral text-xs mb-2 inline-block">{nextEvent.type}</span>
+                    <h4 className="font-extrabold text-sm leading-snug">{nextEvent.title}</h4>
+                    <p className="text-xs text-icebreaker-muted mt-1">
+                      {new Date(nextEvent.startsAt).toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-extrabold text-lg text-icebreaker-coral">
+                      {nextEvent.price === 0 ? "Free" : `₹${nextEvent.price}`}
+                    </div>
+                    <div className="text-xs text-icebreaker-muted">{nextEvent.capacity} spots</div>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          </div>
+        )}
+
+        {/* Leaderboard CTA */}
+        <Link href="/leaderboard">
+          <div className="cursor-pointer rounded-2xl p-4 flex items-center gap-3" style={{ background: "linear-gradient(135deg, rgba(255,176,32,0.1) 0%, rgba(255,90,95,0.08) 100%)", border: "1px solid rgba(255,176,32,0.2)" }} data-testid="leaderboard-cta">
+            <Trophy className="w-8 h-8 text-yellow-400 flex-shrink-0" />
+            <div>
+              <p className="font-extrabold text-sm">Season Leaderboard</p>
+              <p className="text-xs text-icebreaker-muted">Climb the ranks. Win real rewards.</p>
+            </div>
+            <span className="ml-auto text-icebreaker-muted text-sm">→</span>
+          </div>
+        </Link>
+      </div>
+    </div>
+  );
+}
