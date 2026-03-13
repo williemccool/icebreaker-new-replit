@@ -229,6 +229,92 @@ import type { Express } from "express";
       }
     });
     
+    // Get wallet balance
+    app.get("/api/wallet", authMiddleware, async (req: any, res) => {
+      try {
+        const [wallet] = await db.select().from(cubeWallets)
+          .where(eq(cubeWallets.userId, req.userId))
+          .limit(1);
+        
+        if (!wallet) {
+          return res.json({ wallet: { balance: 0, totalEarned: 0, totalSpent: 0 } });
+        }
+        res.json({ wallet });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Get single match by ID
+    app.get("/api/matches/:id", authMiddleware, async (req: any, res) => {
+      try {
+        const matchId = parseInt(req.params.id);
+        const [match] = await db.select().from(matches)
+          .where(eq(matches.id, matchId))
+          .limit(1);
+        
+        if (!match) {
+          return res.status(404).json({ error: "Match not found" });
+        }
+
+        if (match.userAId !== req.userId && match.userBId !== req.userId) {
+          return res.status(403).json({ error: "Not authorized" });
+        }
+
+        const otherId = match.userAId === req.userId ? match.userBId : match.userAId;
+        const [otherUser] = await db.select({
+          id: users.id,
+          name: users.name,
+          city: users.city,
+          bio: users.bio,
+          dob: users.dob,
+          gender: users.gender,
+          photos: users.photos,
+          verified: users.verified
+        }).from(users)
+          .where(eq(users.id, otherId))
+          .limit(1);
+
+        // Get venue name if available
+        let venueName = null;
+        if (match.venueId) {
+          const [venue] = await db.select({ name: venues.name }).from(venues)
+            .where(eq(venues.id, match.venueId))
+            .limit(1);
+          venueName = venue?.name;
+        }
+
+        res.json({ match: { ...match, venueName }, otherUser });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Get user by ID (public profile - safe subset only)
+    app.get("/api/users/:id", authMiddleware, async (req: any, res) => {
+      try {
+        const userId = parseInt(req.params.id);
+        const [user] = await db.select({
+          id: users.id,
+          name: users.name,
+          city: users.city,
+          bio: users.bio,
+          gender: users.gender,
+          photos: users.photos,
+          verified: users.verified
+        }).from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        res.json({ user });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Update user profile
     app.put("/api/user/profile", authMiddleware, async (req: any, res) => {
       try {

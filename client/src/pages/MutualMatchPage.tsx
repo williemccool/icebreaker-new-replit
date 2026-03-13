@@ -22,9 +22,9 @@ export default function MutualMatchPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden" style={{ background: "radial-gradient(ellipse at 50% 40%, rgba(180,20,80,0.3) 0%, transparent 60%), #0A0A0C" }}>
       {/* Floating dots */}
-      <div className="absolute top-1/4 left-1/4 w-3 h-3 rounded-full bg-icebreaker-coral opacity-60 animate-pulse" />
-      <div className="absolute bottom-1/3 right-1/4 w-2 h-2 rounded-full bg-icebreaker-teal opacity-60 animate-pulse" style={{ animationDelay: "0.5s" }} />
-      <div className="absolute top-1/3 right-1/3 w-2 h-2 rounded-full bg-icebreaker-coral opacity-40 animate-pulse" style={{ animationDelay: "1s" }} />
+      <div className="absolute top-1/4 left-1/4 w-3 h-3 rounded-full opacity-60 animate-pulse" style={{ background: "#FF1B8D" }} />
+      <div className="absolute bottom-1/3 right-1/4 w-2 h-2 rounded-full opacity-60 animate-pulse" style={{ background: "#00CFFF", animationDelay: "0.5s" }} />
+      <div className="absolute top-1/3 right-1/3 w-2 h-2 rounded-full opacity-40 animate-pulse" style={{ background: "#FF1B8D", animationDelay: "1s" }} />
 
       {/* Controls */}
       <div className="absolute top-6 left-4">
@@ -41,7 +41,7 @@ export default function MutualMatchPage() {
       <div className="flex flex-col items-center px-8 max-w-sm w-full">
         {/* Avatar pair */}
         <div className="flex items-center justify-center mb-8">
-          <div className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-extrabold text-white border-4 border-icebreaker-bg" style={{ background: "linear-gradient(135deg, #FF1B8D, #c4006e)", zIndex: 2 }}>
+          <div className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-extrabold text-white border-4 border-icebreaker-bg" style={{ background: "linear-gradient(135deg, #FF1B8D, #d6007a)", zIndex: 2 }}>
             U
           </div>
           <div className="w-12 h-12 rounded-full flex items-center justify-center -mx-4 z-10" style={{ background: "#0A0A0C", border: "3px solid rgba(255,27,141,0.5)" }}>
@@ -49,7 +49,7 @@ export default function MutualMatchPage() {
               ♥
             </div>
           </div>
-          <div className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-extrabold text-white border-4 border-icebreaker-bg" style={{ background: "linear-gradient(135deg, #00CFFF, #0080aa)", zIndex: 2 }}>
+          <div className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-extrabold text-white border-4 border-icebreaker-bg" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)", zIndex: 2 }}>
             {otherUser?.name?.[0] || "?"}
           </div>
         </div>
@@ -60,7 +60,7 @@ export default function MutualMatchPage() {
         </h1>
         <p className="text-base text-center mb-1">
           You matched at{" "}
-          <span className="text-icebreaker-teal font-bold">{match?.venueName || "Neon High"}</span>
+          <span className="font-bold" style={{ color: "#00CFFF" }}>{match?.venueName || "Neon High"}</span>
         </p>
         <p className="text-sm text-icebreaker-muted text-center mb-10">
           The challenge is complete. Time to make your move!
@@ -71,7 +71,7 @@ export default function MutualMatchPage() {
           <button
             onClick={() => navigate(`/game/${matchId}`)}
             className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-95"
-            style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
+            style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
             data-testid="button-start-game"
           >
             <Gamepad2 className="w-5 h-5" />

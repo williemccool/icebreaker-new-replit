@@ -102,7 +102,7 @@ export default function PaymentPage({ amount = 1999, label = "Icebreaker Premium
           onClick={handleContinue}
           disabled={loading}
           className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-between px-6 transition-all active:scale-95 disabled:opacity-70"
-          style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
+          style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
           data-testid="button-continue-payment"
         >
           <span>{loading ? "Processing…" : "Continue"}</span>

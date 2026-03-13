@@ -128,7 +128,7 @@ export default function RoomsPage() {
                   onClick={() => !isFull && navigate(`/rooms/${room.id}`)}
                   disabled={isFull}
                   className="w-full h-12 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-                  style={isFull ? { background: "rgba(255,255,255,0.06)" } : { background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 20px rgba(255,27,141,0.4)" }}
+                  style={isFull ? { background: "rgba(255,255,255,0.06)" } : { background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 20px rgba(255,27,141,0.4)" }}
                   data-testid={`button-join-room-${room.id}`}
                 >
                   <Radio className="w-4 h-4" />

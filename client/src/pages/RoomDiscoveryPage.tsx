@@ -243,7 +243,7 @@ export default function RoomDiscoveryPage() {
                 onClick={() => handleAction("like")}
                 className="w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90"
                 style={{
-                  background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)",
+                  background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)",
                   boxShadow: "0 0 28px rgba(255,27,141,0.55)",
                   border: "none"
                 }}

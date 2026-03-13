@@ -68,14 +68,14 @@ export default {
       },
       boxShadow: {
         'glow-coral': '0 0 24px rgba(255, 27, 141, 0.35)',
-        'glow-orchid': '0 0 20px rgba(168, 85, 247, 0.25)',
+        'glow-orchid': '0 0 20px rgba(0, 207, 255, 0.25)',
         'glow-teal': '0 0 24px rgba(0, 207, 255, 0.35)',
         'glow-pink-lg': '0 0 40px rgba(255, 27, 141, 0.5)',
         'card': '0 4px 24px rgba(0,0,0,0.5)',
       },
       backgroundImage: {
-        'gradient-coral-orchid': 'linear-gradient(135deg, #FF1B8D 0%, #A855F7 100%)',
-        'gradient-orchid-teal': 'linear-gradient(135deg, #A855F7 0%, #00CFFF 100%)',
+        'gradient-coral-orchid': 'linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)',
+        'gradient-orchid-teal': 'linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)',
         'gradient-nightlife': 'linear-gradient(180deg, #0A0A0C 0%, #141418 100%)',
         'gradient-pink-cyan': 'linear-gradient(135deg, #FF1B8D 0%, #00CFFF 100%)',
       },

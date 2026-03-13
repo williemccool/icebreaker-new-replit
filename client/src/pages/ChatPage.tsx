@@ -48,7 +48,7 @@ export default function ChatPage() {
     const res = await fetch(`/api/matches/${matchId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ content: newMessage })
+      body: JSON.stringify({ body: newMessage })
     });
     if (res.ok) {
       const msg = await res.json();
@@ -103,18 +103,18 @@ export default function ChatPage() {
           return (
             <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
               {!isMe && (
-                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 mr-2 mt-1" style={{ background: "linear-gradient(135deg, #00CFFF, #0080aa)" }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-white flex-shrink-0 mr-2 mt-1" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)" }}>
                   {otherUser?.name?.[0] || "?"}
                 </div>
               )}
               <div
                 className="max-w-xs px-4 py-2.5 rounded-2xl text-sm leading-relaxed"
                 style={isMe
-                  ? { background: "linear-gradient(135deg, #FF1B8D, #c4006e)", color: "white", borderBottomRightRadius: 6 }
+                  ? { background: "linear-gradient(135deg, #FF1B8D, #d6007a)", color: "white", borderBottomRightRadius: 6 }
                   : { background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", color: "#F0F2F7", borderBottomLeftRadius: 6 }}
                 data-testid={`message-${i}`}
               >
-                {msg.content}
+                {msg.body}
               </div>
             </div>
           );
@@ -155,7 +155,7 @@ export default function ChatPage() {
           <button
             onClick={handleSend}
             className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition-all active:scale-90"
-            style={{ background: newMessage.trim() ? "linear-gradient(135deg, #FF1B8D, #c4006e)" : "rgba(255,255,255,0.08)" }}
+            style={{ background: newMessage.trim() ? "linear-gradient(135deg, #FF1B8D, #d6007a)" : "rgba(255,255,255,0.08)" }}
             data-testid="button-send"
           >
             <Send className="w-4 h-4 text-white" />

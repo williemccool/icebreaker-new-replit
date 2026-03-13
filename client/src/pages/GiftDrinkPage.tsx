@@ -156,7 +156,7 @@ export default function GiftDrinkPage() {
           onClick={() => sendGift.mutate()}
           disabled={sendGift.isPending || !canAfford}
           className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #c4006e 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
+          style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
           data-testid="button-send-drink"
         >
           🍸 {sendGift.isPending ? "Sending…" : "Send Drink Voucher"}
