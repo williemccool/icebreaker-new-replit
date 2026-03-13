@@ -3,14 +3,13 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { useEffect, useState } from "react";
-import { Home, Compass, MapPin, MessageCircle, User, Radio } from "lucide-react";
+import { Home, MessageCircle, User, Radio } from "lucide-react";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import TutorialPage from "./pages/TutorialPage";
 import HomePage from "./pages/HomePage";
-import DiscoverPage from "./pages/DiscoverPage";
 import VenuesPage from "./pages/VenuesPage";
 import VenueDetailPage from "./pages/VenueDetailPage";
 import RoomsPage from "./pages/RoomsPage";
@@ -36,7 +35,6 @@ const HIDE_NAV_ROUTES = [
 
 const NAV_ITEMS = [
   { href: "/", icon: Home, label: "Home" },
-  { href: "/discover", icon: Compass, label: "Discover" },
   { href: "/rooms", icon: Radio, label: "Live" },
   { href: "/matches", icon: MessageCircle, label: "Chats" },
   { href: "/profile", icon: User, label: "Profile" },
@@ -111,7 +109,6 @@ function App() {
           <Route path="/" component={HomePage} />
           <Route path="/tutorial" component={TutorialPage} />
           <Route path="/onboarding" component={OnboardingPage} />
-          <Route path="/discover" component={DiscoverPage} />
           <Route path="/venues" component={VenuesPage} />
           <Route path="/venues/:id" component={VenueDetailPage} />
           <Route path="/rooms" component={RoomsPage} />

@@ -490,29 +490,7 @@ import type { Express } from "express";
 
     // ============ SWIPE & MATCH ROUTES ============
     
-    // Get swipe candidates
-    app.get("/api/discover/swipe", authMiddleware, async (req: any, res) => {
-      try {
-        const limit = 20;
-        
-        // Get already swiped IDs
-        const swipedIds = await db.select({ id: swipes.swipedId })
-          .from(swipes)
-          .where(eq(swipes.swiperId, req.userId));
-        
-        const excludeIds = swipedIds.map(s => s.id);
-        excludeIds.push(req.userId);
-        
-        // Get candidates
-        const candidates = await db.select().from(users)
-          .where(sql`id NOT IN (${sql.raw(excludeIds.join(','))})`)
-          .limit(limit);
-        
-        res.json(candidates);
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
-      }
-    });
+
     
     // Swipe on user
     app.post("/api/swipe", authMiddleware, async (req: any, res) => {
