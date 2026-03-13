@@ -1,78 +1,122 @@
 import { useState } from "react";
-  import { Card } from "@/components/ui/card";
-  import { Button } from "@/components/ui/button";
-  import { Sparkles, Award, Settings, LogOut } from "lucide-react";
-  import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Sparkles, Award, Trophy, LogOut, Settings, ChevronRight, Shield, Star } from "lucide-react";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
-  export default function ProfilePage() {
-    const [user] = useState(JSON.parse(localStorage.getItem("user") || "{}"));
+export default function ProfilePage() {
+  const [user] = useState(JSON.parse(localStorage.getItem("user") || "{}"));
 
-    const logout = () => {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      window.location.href = "/";
-    };
+  const { data: walletData } = useQuery({
+    queryKey: ["/api/user/me"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/user/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.json();
+    }
+  });
 
-    return (
-      <div className="min-h-screen pb-20">
-        <div className="sticky top-0 z-10 bg-icebreaker-bg/95 backdrop-blur-lg border-b border-gray-800 p-4">
-          <h1 className="text-2xl font-bold max-w-7xl mx-auto">Profile</h1>
-        </div>
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    window.location.href = "/";
+  };
 
-        <div className="max-w-7xl mx-auto p-4 space-y-6">
-          <Card className="card-dark text-center">
-            <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-br from-icebreaker-coral to-icebreaker-orchid flex items-center justify-center text-3xl font-bold">
-              {user.name?.[0] || "U"}
-            </div>
-            <h2 className="text-2xl font-bold mt-4">{user.name}</h2>
-            <p className="text-gray-400">{user.city}</p>
-          </Card>
+  const balance = walletData?.wallet?.balance ?? 0;
 
-          <Card className="card-dark">
-            <h3 className="font-semibold text-lg mb-4">Stats</h3>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
-                <div className="text-2xl font-bold text-icebreaker-coral">{user.level || 1}</div>
-                <div className="text-xs text-gray-400">Level</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-icebreaker-orchid">{user.xp || 0}</div>
-                <div className="text-xs text-gray-400">XP</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-icebreaker-success">0</div>
-                <div className="text-xs text-gray-400">Badges</div>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="card-dark">
-            <h3 className="font-semibold text-lg mb-4">Quick Links</h3>
-            <div className="space-y-2">
-              <Link href="/quests">
-                <Button variant="ghost" className="w-full justify-start">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Quests & Rewards
-                </Button>
-              </Link>
-              <Link href="/leaderboard">
-                <Button variant="ghost" className="w-full justify-start">
-                  <Award className="w-4 h-4 mr-2" />
-                  Leaderboard
-                </Button>
-              </Link>
-            </div>
-          </Card>
-
-          <Button 
-            onClick={logout}
-            variant="outline" 
-            className="w-full border-red-500 text-red-500 hover:bg-red-500/10"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
+  return (
+    <div className="min-h-screen pb-24">
+      <div className="page-header">
+        <div className="max-w-lg mx-auto flex items-center justify-between">
+          <h1 className="text-xl font-extrabold tracking-tight">Profile</h1>
+          <button className="w-9 h-9 rounded-xl flex items-center justify-center bg-icebreaker-surface border border-icebreaker-border" data-testid="button-settings">
+            <Settings className="w-4 h-4 text-icebreaker-muted" />
+          </button>
         </div>
       </div>
-    );
-  }
+
+      <div className="max-w-lg mx-auto p-4 space-y-4">
+        {/* Avatar & Name */}
+        <div className="card-dark text-center py-6">
+          <div
+            className="w-20 h-20 mx-auto rounded-full flex items-center justify-center text-3xl font-extrabold text-white mb-3"
+            style={{ background: "linear-gradient(135deg, #FF5A5F 0%, #A855F7 100%)" }}
+            data-testid="avatar-profile"
+          >
+            {user.name?.[0] || "U"}
+          </div>
+          <h2 className="text-xl font-extrabold tracking-tight">{user.name || "Your Name"}</h2>
+          <p className="text-sm text-icebreaker-muted mt-0.5">{user.city || "Bangalore"}</p>
+          {user.verified && (
+            <div className="flex items-center justify-center gap-1.5 mt-2">
+              <Shield className="w-3.5 h-3.5 text-icebreaker-teal" />
+              <span className="text-xs font-bold text-icebreaker-teal">Verified</span>
+            </div>
+          )}
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { value: user.level || 1, label: "Level", color: "text-icebreaker-coral" },
+            { value: user.xp || 0, label: "XP", color: "text-icebreaker-orchid" },
+            { value: balance, label: "Cubes", color: "text-icebreaker-teal" },
+          ].map(({ value, label, color }) => (
+            <div key={label} className="card-dark text-center py-3" data-testid={`stat-${label.toLowerCase()}`}>
+              <div className={`text-2xl font-extrabold ${color}`}>{value}</div>
+              <div className="text-xs text-icebreaker-muted mt-0.5 font-semibold">{label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Bio */}
+        {user.bio && (
+          <div className="card-dark">
+            <p className="text-sm text-icebreaker-muted leading-relaxed">{user.bio}</p>
+          </div>
+        )}
+
+        {/* Interests */}
+        {user.interests && user.interests.length > 0 && (
+          <div className="card-dark">
+            <h3 className="text-xs font-bold uppercase tracking-widest text-icebreaker-muted mb-3">Interests</h3>
+            <div className="flex flex-wrap gap-2">
+              {user.interests.map((interest: string) => (
+                <span key={interest} className="pill-neutral">{interest}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick links */}
+        <div className="card-dark divide-y divide-icebreaker-border">
+          {[
+            { href: "/quests", icon: Sparkles, label: "Quests & Rewards", color: "text-icebreaker-coral" },
+            { href: "/leaderboard", icon: Trophy, label: "Leaderboard", color: "text-yellow-400" },
+          ].map(({ href, icon: Icon, label, color }) => (
+            <Link key={href} href={href}>
+              <button className="w-full flex items-center gap-3 py-3 hover:bg-icebreaker-elevated transition-colors" data-testid={`link-${label.toLowerCase().replace(/ /g,"-")}`}>
+                <Icon className={`w-4 h-4 ${color} flex-shrink-0`} />
+                <span className="text-sm font-semibold flex-1 text-left">{label}</span>
+                <ChevronRight className="w-4 h-4 text-icebreaker-muted" />
+              </button>
+            </Link>
+          ))}
+        </div>
+
+        {/* Logout */}
+        <Button
+          onClick={logout}
+          variant="outline"
+          className="w-full h-10 border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-400 font-semibold text-sm"
+          data-testid="button-logout"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Logout
+        </Button>
+      </div>
+    </div>
+  );
+}

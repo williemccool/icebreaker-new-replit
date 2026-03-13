@@ -1,67 +1,102 @@
 import { useQuery } from "@tanstack/react-query";
-  import { Card } from "@/components/ui/card";
-  import { Button } from "@/components/ui/button";
-  import { Users, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, Clock, Crown, MessageSquare } from "lucide-react";
 
-  export default function RoomsPage() {
-    const { data: rooms } = useQuery({
-      queryKey: ["/api/rooms"],
-      queryFn: async () => {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/rooms", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        return res.json();
-      }
-    });
+export default function RoomsPage() {
+  const { data: rooms, isLoading } = useQuery({
+    queryKey: ["/api/rooms"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/rooms", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.json();
+    }
+  });
 
-    return (
-      <div className="min-h-screen pb-20">
-        <div className="sticky top-0 z-10 bg-icebreaker-bg/95 backdrop-blur-lg border-b border-gray-800 p-4">
-          <h1 className="text-2xl font-bold max-w-7xl mx-auto">Virtual Rooms</h1>
+  return (
+    <div className="min-h-screen pb-24">
+      <div className="page-header">
+        <div className="max-w-lg mx-auto">
+          <h1 className="text-xl font-extrabold tracking-tight">Virtual Rooms</h1>
+          <p className="text-xs text-icebreaker-muted mt-0.5">Chat with people at the venue before meeting IRL</p>
         </div>
+      </div>
 
-        <div className="max-w-7xl mx-auto p-4 space-y-4">
-          {rooms && rooms.length > 0 ? (
-            rooms.map((room: any) => (
-              <Card key={room.id} className="card-dark">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-bold text-lg">{room.name}</h3>
-                    <p className="text-sm text-gray-400">
-                      {new Date(room.startsAt).toLocaleTimeString()} - {new Date(room.endsAt).toLocaleTimeString()}
-                    </p>
+      <div className="max-w-lg mx-auto p-4 space-y-3">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1,2,3].map(i => <div key={i} className="card-dark animate-pulse h-28" />)}
+          </div>
+        ) : rooms && rooms.length > 0 ? (
+          rooms.map((room: any) => {
+            const isFull = room.participants >= room.capacity;
+            const pct = Math.round((room.participants / room.capacity) * 100);
+            return (
+              <div key={room.id} className="card-dark" data-testid={`room-card-${room.id}`}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1 pr-3">
+                    <h3 className="font-extrabold text-base tracking-tight">{room.name}</h3>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Clock className="w-3 h-3 text-icebreaker-muted" />
+                      <span className="text-xs text-icebreaker-muted">
+                        {new Date(room.startsAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} –{" "}
+                        {new Date(room.endsAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
                   </div>
                   {room.premium && (
-                    <span className="px-2 py-1 rounded-full bg-icebreaker-orchid/20 text-icebreaker-orchid text-xs">
-                      Premium
-                    </span>
+                    <div className="flex items-center gap-1 pill-orchid">
+                      <Crown className="w-3 h-3" />
+                      <span>Premium</span>
+                    </div>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-icebreaker-coral">
-                    <Users className="w-5 h-5" />
-                    <span className="font-semibold">{room.participants || 0}/{room.capacity}</span>
+                {/* Capacity bar */}
+                <div className="mb-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-icebreaker-teal" />
+                      <span className="text-xs font-bold text-icebreaker-teal">{room.participants || 0}/{room.capacity}</span>
+                    </div>
+                    <span className="text-xs text-icebreaker-muted">{isFull ? "Full" : `${room.capacity - (room.participants || 0)} spots left`}</span>
                   </div>
-
-                  <Button 
-                    size="sm"
-                    className="btn-coral"
-                    disabled={room.participants >= room.capacity}
-                  >
-                    {room.participants >= room.capacity ? "Full" : "Join Room"}
-                  </Button>
+                  <div className="w-full h-1.5 rounded-full bg-icebreaker-surface overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${pct}%`,
+                        background: isFull ? "#FF5A5F" : "linear-gradient(90deg, #14C8A0 0%, #A855F7 100%)"
+                      }}
+                    />
+                  </div>
                 </div>
-              </Card>
-            ))
-          ) : (
-            <div className="text-center py-12">
-              <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
-              <p className="text-gray-400">No active rooms right now</p>
+
+                <Button
+                  size="sm"
+                  className={`w-full h-9 text-sm font-bold ${isFull ? "opacity-50 cursor-not-allowed bg-icebreaker-surface border border-icebreaker-border text-icebreaker-muted" : "btn-teal"}`}
+                  disabled={isFull}
+                  data-testid={`button-join-room-${room.id}`}
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  {isFull ? "Room Full" : "Join Room"}
+                </Button>
+              </div>
+            );
+          })
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-icebreaker-surface">
+              <Users className="w-8 h-8 text-icebreaker-muted" />
             </div>
-          )}
-        </div>
+            <div className="text-center">
+              <p className="font-bold text-icebreaker-muted">No active rooms right now</p>
+              <p className="text-xs text-icebreaker-muted/60 mt-1">Rooms open when events start</p>
+            </div>
+          </div>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+}

@@ -1,56 +1,77 @@
 import { useQuery } from "@tanstack/react-query";
-  import { Card } from "@/components/ui/card";
-  import { Heart, MessageCircle } from "lucide-react";
-  import { Link } from "wouter";
+import { Heart, MessageCircle, Clock } from "lucide-react";
+import { Link } from "wouter";
 
-  export default function MatchesPage() {
-    const { data: matches } = useQuery({
-      queryKey: ["/api/matches"],
-      queryFn: async () => {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/matches", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        return res.json();
-      }
-    });
+export default function MatchesPage() {
+  const { data: matches, isLoading } = useQuery({
+    queryKey: ["/api/matches"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/matches", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.json();
+    }
+  });
 
-    return (
-      <div className="min-h-screen pb-20">
-        <div className="sticky top-0 z-10 bg-icebreaker-bg/95 backdrop-blur-lg border-b border-gray-800 p-4">
-          <h1 className="text-2xl font-bold max-w-7xl mx-auto">Your Matches</h1>
-        </div>
-
-        <div className="max-w-7xl mx-auto p-4 space-y-4">
-          {matches && matches.length > 0 ? (
-            matches.map((match: any) => (
-              <Link key={match.id} href={`/chat/${match.id}`}>
-                <Card className="card-dark hover:border-icebreaker-coral transition-colors cursor-pointer">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full bg-icebreaker-orchid flex items-center justify-center font-semibold text-xl">
-                      {match.otherUser?.name?.[0] || "?"}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-lg">{match.otherUser?.name}</h3>
-                      {match.lastMessage && (
-                        <p className="text-sm text-gray-400 line-clamp-1">
-                          {match.lastMessage.body}
-                        </p>
-                      )}
-                    </div>
-                    <MessageCircle className="w-5 h-5 text-icebreaker-coral" />
-                  </div>
-                </Card>
-              </Link>
-            ))
-          ) : (
-            <div className="text-center py-12">
-              <Heart className="w-12 h-12 mx-auto mb-4 opacity-20" />
-              <p className="text-gray-400">No matches yet</p>
-              <p className="text-sm text-gray-500 mt-2">Start swiping to find your matches!</p>
-            </div>
-          )}
+  return (
+    <div className="min-h-screen pb-24">
+      <div className="page-header">
+        <div className="max-w-lg mx-auto">
+          <h1 className="text-xl font-extrabold tracking-tight">Matches</h1>
+          <p className="text-xs text-icebreaker-muted mt-0.5">{matches?.length || 0} connections</p>
         </div>
       </div>
-    );
-  }
+
+      <div className="max-w-lg mx-auto p-4 space-y-3">
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1,2,3].map(i => <div key={i} className="card-dark animate-pulse h-20" />)}
+          </div>
+        ) : matches && matches.length > 0 ? (
+          matches.map((match: any) => (
+            <Link key={match.id} href={`/chat/${match.id}`}>
+              <div
+                className="card-dark hover:border-icebreaker-coral/40 transition-all cursor-pointer flex items-center gap-3"
+                data-testid={`match-card-${match.id}`}
+              >
+                <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white flex-shrink-0" style={{ background: "linear-gradient(135deg, #A855F7 0%, #FF5A5F 100%)" }}>
+                  {match.otherUser?.name?.[0] || "?"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold truncate">{match.otherUser?.name || "Someone"}</p>
+                  {match.lastMessage ? (
+                    <p className="text-xs text-icebreaker-muted truncate mt-0.5">{match.lastMessage.body}</p>
+                  ) : (
+                    <p className="text-xs text-icebreaker-muted mt-0.5 italic">Say hi 👋</p>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <MessageCircle className="w-4 h-4 text-icebreaker-coral" />
+                  {match.lastMessage && (
+                    <span className="text-xs text-icebreaker-muted">
+                      {new Date(match.lastMessage.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </Link>
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, rgba(255,90,95,0.15) 0%, rgba(168,85,247,0.15) 100%)" }}>
+              <Heart className="w-8 h-8 text-icebreaker-coral" />
+            </div>
+            <div className="text-center">
+              <p className="font-bold">No matches yet</p>
+              <p className="text-xs text-icebreaker-muted mt-1">Head to Discover and start swiping!</p>
+            </div>
+            <Link href="/discover">
+              <button className="btn-coral text-sm">Start Discovering →</button>
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
