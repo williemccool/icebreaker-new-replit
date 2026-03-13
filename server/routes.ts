@@ -518,10 +518,19 @@ import type { Express } from "express";
           .limit(1);
         
         if (reciprocalSwipe) {
+          // Check if user is checked into a venue to record match location
+          const [activeCheckIn] = await db.select().from(checkIns)
+            .where(and(
+              eq(checkIns.userId, req.userId),
+              isNull(checkIns.checkedOutAt)
+            ))
+            .limit(1);
+
           // Create match
           const [match] = await db.insert(matches).values({
             userAId: req.userId,
             userBId: swipedId,
+            venueId: activeCheckIn?.venueId || null,
             status: "matched"
           }).returning();
           
@@ -554,7 +563,15 @@ import type { Express } from "express";
         
         const matchesWithUsers = await Promise.all(userMatches.map(async (match) => {
           const otherId = match.userAId === req.userId ? match.userBId : match.userAId;
-          const [other] = await db.select().from(users)
+          const [other] = await db.select({
+            id: users.id,
+            name: users.name,
+            city: users.city,
+            bio: users.bio,
+            gender: users.gender,
+            photos: users.photos,
+            verified: users.verified
+          }).from(users)
             .where(eq(users.id, otherId))
             .limit(1);
           
@@ -669,18 +686,23 @@ import type { Express } from "express";
         
         const activeRooms = await query;
         
-        // Get participant counts
+        // Get participant counts and gender ratios
         const roomsWithCounts = await Promise.all(activeRooms.map(async (room) => {
-          const [count] = await db.select({ count: sql<number>`count(*)` })
+          const presences = await db.select({ gender: users.gender })
             .from(roomPresence)
+            .innerJoin(users, eq(roomPresence.userId, users.id))
             .where(and(
               eq(roomPresence.roomId, room.id),
               isNull(roomPresence.leftAt)
             ));
           
+          const total = presences.length;
+          const femaleCount = presences.filter(p => p.gender === 'female').length;
+          
           return {
             ...room,
-            participants: Number(count?.count || 0)
+            participants: total,
+            femaleRatio: total > 0 ? femaleCount / total : 0.5
           };
         }));
         

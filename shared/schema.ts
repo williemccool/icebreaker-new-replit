@@ -59,6 +59,7 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
     id: serial("id").primaryKey(),
     userAId: integer("user_a_id").references(() => users.id).notNull(),
     userBId: integer("user_b_id").references(() => users.id).notNull(),
+    venueId: integer("venue_id").references(() => venues.id),
     status: matchStatusEnum("status").default('matched'),
     createdAt: timestamp("created_at").defaultNow()
   });

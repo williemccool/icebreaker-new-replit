@@ -49,9 +49,13 @@ export default function MutualMatchPage() {
               ♥
             </div>
           </div>
-          <div className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-extrabold text-white border-4 border-icebreaker-bg" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)", zIndex: 2 }}>
-            {otherUser?.name?.[0] || "?"}
-          </div>
+          {(otherUser?.photos as string[])?.[0] ? (
+            <img src={(otherUser.photos as string[])[0]} alt={otherUser?.name || ""} className="w-24 h-24 rounded-full object-cover border-4 border-icebreaker-bg" style={{ zIndex: 2 }} />
+          ) : (
+            <div className="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-extrabold text-white border-4 border-icebreaker-bg" style={{ background: "linear-gradient(135deg, #00CFFF, #009ecf)", zIndex: 2 }}>
+              {otherUser?.name?.[0] || "?"}
+            </div>
+          )}
         </div>
 
         {/* Text */}
