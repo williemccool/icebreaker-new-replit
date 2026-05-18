@@ -61,6 +61,7 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
     userBId: integer("user_b_id").references(() => users.id).notNull(),
     venueId: integer("venue_id").references(() => venues.id),
     status: matchStatusEnum("status").default('matched'),
+    icebreakerCompleted: boolean("icebreaker_completed").default(false),
     createdAt: timestamp("created_at").defaultNow()
   });
 

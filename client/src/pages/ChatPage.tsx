@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { Send, ArrowLeft, MoreHorizontal, Calendar, Image, Smile, Sparkles, MapPin, X } from "lucide-react";
+import { Send, ArrowLeft, MoreHorizontal, Calendar, Image, Smile, Sparkles, MapPin, X, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ChatPage() {
@@ -26,7 +26,7 @@ export default function ChatPage() {
     }
   });
 
-  const { data: matchData } = useQuery({
+  const { data: matchData, isLoading: matchLoading } = useQuery({
     queryKey: [`/api/matches/${matchId}`],
     queryFn: async () => {
       const token = localStorage.getItem("token");
@@ -61,6 +61,50 @@ export default function ChatPage() {
   };
 
   const otherUser = matchData?.otherUser;
+  const icebreakerCompleted = matchData?.icebreakerCompleted ?? false;
+
+  if (matchLoading || !matchData) {
+    return <div className="min-h-screen" style={{ background: "#0A0A0C" }} />;
+  }
+
+  if (!icebreakerCompleted) {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>
+        <div className="flex items-center gap-3 px-4 pt-5 pb-3" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          <button onClick={() => navigate("/matches")} aria-label="Back" className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }} data-testid="button-back">
+            <ArrowLeft className="w-4 h-4 text-white" />
+          </button>
+          <p className="font-extrabold text-sm truncate">{otherUser?.name || "Match"}</p>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-5">
+          <div className="relative">
+            {(otherUser?.photos as string[])?.[0] ? (
+              <img src={(otherUser.photos as string[])[0]} alt={otherUser?.name || ""} className="w-28 h-28 rounded-full object-cover" style={{ border: "3px solid rgba(255,27,141,0.5)" }} />
+            ) : (
+              <div className="w-28 h-28 rounded-full flex items-center justify-center font-extrabold text-3xl text-white" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
+                {otherUser?.name?.[0] || "?"}
+              </div>
+            )}
+            <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: "#141418", border: "2px solid #0A0A0C" }}>
+              <Lock className="w-4 h-4" style={{ color: "#FF1B8D" }} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-2xl font-extrabold">It's a match with {otherUser?.name?.split(" ")[0] || "them"}!</h2>
+            <p className="text-sm text-icebreaker-muted max-w-xs">Chat unlocks after you both play a quick 3-round icebreaker. Takes 60 seconds.</p>
+          </div>
+          <button
+            onClick={() => navigate(`/game/${matchId}`)}
+            className="w-full max-w-xs py-4 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2"
+            style={{ background: "linear-gradient(135deg, #FF1B8D, #d6007a)", boxShadow: "0 4px 20px rgba(255,27,141,0.4)" }}
+            data-testid="button-start-icebreaker"
+          >
+            <Sparkles className="w-4 h-4" /> Start Icebreaker
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>

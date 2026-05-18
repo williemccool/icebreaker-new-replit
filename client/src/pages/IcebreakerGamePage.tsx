@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Check, Sparkles, X, Send, Lock, ArrowDown, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -138,9 +139,21 @@ export default function IcebreakerGamePage() {
     setStage("responses");
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (isLastRound) {
       setStage("finished");
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`/api/matches/${matchId}/icebreaker`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error("Failed to unlock chat");
+        await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}`] });
+        await queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      } catch {
+        toast({ title: "Couldn't unlock chat", description: "Please try again.", variant: "destructive" });
+      }
       setTimeout(() => navigate(`/chat/${matchId}`), 1500);
       return;
     }

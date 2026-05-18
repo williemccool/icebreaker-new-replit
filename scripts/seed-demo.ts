@@ -350,15 +350,17 @@ async function seedDemo() {
         await db.insert(swipes).values({ swiperId: mainUser.id, swipedId: target.user.id, liked: true });
         await db.insert(swipes).values({ swiperId: target.user.id, swipedId: mainUser.id, liked: true });
 
-        // Create match
+        // Create match — only first match has icebreaker already done.
+        // The other matches stay "ice not broken" so the demo can show the locked CTA.
         const [match] = await db.insert(matches).values({
           userAId: mainUser.id,
           userBId: target.user.id,
           venueId: target.venueId,
-          status: "matched"
+          status: "matched",
+          icebreakerCompleted: matchCount === 0,
         }).returning();
 
-        // Seed some messages for the first match
+        // Seed some messages only for the first match (the one with icebreaker done)
         if (matchCount === 0) {
           await db.insert(messages).values([
             { matchId: match.id, senderId: target.user.id, body: "Hey! I saw you at Toit tonight 👋", meta: {} },
