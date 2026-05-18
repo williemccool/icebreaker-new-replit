@@ -14,6 +14,7 @@ import VenuesPage from "./pages/VenuesPage";
 import VenueDetailPage from "./pages/VenueDetailPage";
 import RoomsPage from "./pages/RoomsPage";
 import RoomDiscoveryPage from "./pages/RoomDiscoveryPage";
+import RoomEntryPage from "./pages/RoomEntryPage";
 import MatchesPage from "./pages/MatchesPage";
 import ChatPage from "./pages/ChatPage";
 import EventsPage from "./pages/EventsPage";
@@ -112,6 +113,7 @@ function App() {
           <Route path="/venues" component={VenuesPage} />
           <Route path="/venues/:id" component={VenueDetailPage} />
           <Route path="/rooms" component={RoomsPage} />
+          <Route path="/rooms/:id/entry" component={RoomEntryPage} />
           <Route path="/rooms/:id" component={RoomDiscoveryPage} />
           <Route path="/matches" component={MatchesPage} />
           <Route path="/chat/:id" component={ChatPage} />

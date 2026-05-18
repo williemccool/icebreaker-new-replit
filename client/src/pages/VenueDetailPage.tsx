@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, MapPin, Star, Zap, Users, Calendar, ChevronRight, Clock, GlassWater, Badge } from "lucide-react";
+import { ArrowLeft, MapPin, Star, Zap, Users, Calendar, ChevronRight, Clock, GlassWater, Badge, Radio, Eye } from "lucide-react";
 
 export default function VenueDetailPage() {
   const params = useParams<{ id: string }>();
@@ -11,6 +11,8 @@ export default function VenueDetailPage() {
   const { toast } = useToast();
   const [checkedIn, setCheckedIn] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [presenceTab, setPresenceTab] = useState<"venue" | "live">("venue");
+  const [visible, setVisible] = useState(true);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: [`/api/venues/${venueId}`],
@@ -25,6 +27,14 @@ export default function VenueDetailPage() {
     queryKey: ["/api/events", venueId],
     queryFn: async () => {
       const res = await fetch(`/api/events?venueId=${venueId}`);
+      return res.json();
+    }
+  });
+
+  const { data: venueRooms } = useQuery({
+    queryKey: ["/api/rooms", { venueId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/rooms?venueId=${venueId}`);
       return res.json();
     }
   });
@@ -95,19 +105,49 @@ export default function VenueDetailPage() {
         </div>
 
         <div className="max-w-lg mx-auto px-4 space-y-4">
-          {/* Status pills */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: "rgba(255,27,141,0.15)", border: "1px solid rgba(255,27,141,0.35)" }}>
-              <MapPin className="w-3.5 h-3.5 text-icebreaker-coral" />
-              <span className="text-xs font-bold text-icebreaker-coral">You are here</span>
+          {/* In-Venue / Online Live toggle */}
+          <div className="flex p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <button
+              onClick={() => setPresenceTab("venue")}
+              className="flex-1 py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5"
+              style={presenceTab === "venue"
+                ? { background: "linear-gradient(135deg, #FF1B8D, #d6007a)", color: "white", boxShadow: "0 2px 12px rgba(255,27,141,0.35)" }
+                : { color: "#8A8FA8" }}
+              data-testid="tab-in-venue"
+            >
+              <MapPin className="w-3.5 h-3.5" /> In-Venue
+            </button>
+            <button
+              onClick={() => setPresenceTab("live")}
+              className="flex-1 py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5"
+              style={presenceTab === "live"
+                ? { background: "linear-gradient(135deg, #00CFFF, #0099cc)", color: "white", boxShadow: "0 2px 12px rgba(0,207,255,0.35)" }
+                : { color: "#8A8FA8" }}
+              data-testid="tab-online-live"
+            >
+              <Radio className="w-3.5 h-3.5" /> Online Live
+            </button>
+          </div>
+
+          {/* Visibility toggle */}
+          <div className="flex items-center justify-between px-4 py-2.5 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-icebreaker-muted" />
+              <span className="text-xs font-bold">Visible to others here</span>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
-              <Users className="w-3.5 h-3.5 text-icebreaker-teal" />
-              <span className="text-xs font-bold text-icebreaker-teal">{checkedInUsers?.length || 0} Active</span>
-            </div>
+            <button
+              onClick={() => setVisible(!visible)}
+              className="w-10 h-6 rounded-full relative transition-colors"
+              style={{ background: visible ? "#FF1B8D" : "rgba(255,255,255,0.15)" }}
+              data-testid="toggle-visible"
+              aria-label="Toggle visibility"
+            >
+              <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all" style={{ left: visible ? "18px" : "2px" }} />
+            </button>
           </div>
 
           {/* Who's here */}
+          {presenceTab === "venue" ? (
           <div>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -148,6 +188,55 @@ export default function VenueDetailPage() {
               </div>
             )}
           </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-extrabold text-base">Live Rooms</h2>
+                  <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md" style={{ background: "rgba(0,207,255,0.15)", color: "#00CFFF" }}>HYBRID MODE</span>
+                </div>
+                <Link href="/rooms">
+                  <span className="text-xs font-bold text-icebreaker-teal cursor-pointer">All rooms →</span>
+                </Link>
+              </div>
+              <p className="text-xs text-icebreaker-muted mb-3">In-venue? You can also join these online rooms from your table to meet others virtually before approaching.</p>
+              {venueRooms && venueRooms.length > 0 ? (
+                <div className="space-y-2">
+                  {venueRooms.slice(0, 3).map((room: any) => {
+                    const isLive = room.active;
+                    return (
+                      <button
+                        key={room.id}
+                        onClick={() => navigate(`/rooms/${room.id}/entry`)}
+                        className="w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-all active:scale-[0.98]"
+                        style={{ background: "rgba(0,207,255,0.06)", border: `1px solid ${isLive ? "rgba(0,207,255,0.4)" : "rgba(255,255,255,0.08)"}` }}
+                        data-testid={`venue-room-${room.id}`}
+                      >
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: isLive ? "rgba(255,27,141,0.15)" : "rgba(255,255,255,0.05)" }}>
+                          <Radio className={`w-4 h-4 ${isLive ? "text-icebreaker-coral" : "text-icebreaker-muted"}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className="font-extrabold text-sm truncate">{room.name}</p>
+                            {isLive && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md" style={{ background: "rgba(255,27,141,0.2)", color: "#FF1B8D" }}>LIVE</span>}
+                          </div>
+                          <p className="text-[11px] text-icebreaker-muted">{room.participants || 0}/{room.capacity} • {isLive ? "Very Active" : `Starts in ${Math.max(0, Math.floor((new Date(room.startsAt).getTime() - Date.now()) / 60000))}m`}</p>
+                        </div>
+                        <span className="text-xs font-extrabold px-3 py-1.5 rounded-full" style={{ background: "linear-gradient(135deg, #00CFFF, #0099cc)", color: "white" }}>
+                          Join
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 rounded-2xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <p className="text-sm text-icebreaker-muted">No live rooms here right now</p>
+                  <p className="text-xs text-icebreaker-muted/70 mt-1">Check back during peak hours</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Icebreaker Zone Rewards */}
           <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,27,141,0.08), rgba(0,207,255,0.06))", border: "1px solid rgba(255,27,141,0.2)" }}>
