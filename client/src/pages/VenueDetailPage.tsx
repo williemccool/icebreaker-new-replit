@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +38,24 @@ export default function VenueDetailPage() {
       return res.json();
     }
   });
+
+  const { data: meData } = useQuery({
+    queryKey: ["/api/user/me"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/user/me", { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+  });
+
+  // Auto-detect existing check-in for current user
+  useEffect(() => {
+    const myId = meData?.user?.id;
+    const list = data?.checkedInUsers || [];
+    if (myId && list.some((row: any) => row.user?.id === myId)) {
+      setCheckedIn(true);
+    }
+  }, [meData, data]);
 
   const doCheckIn = async () => {
     if (checkedIn) {
