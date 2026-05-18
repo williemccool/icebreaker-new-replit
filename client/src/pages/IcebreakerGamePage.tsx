@@ -1,45 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Check, Sparkles, X, Send, Lock, ArrowDown, Loader2 } from "lucide-react";
+import { ArrowLeft, Check, Sparkles, X, Send, Lock, ArrowDown, Loader2, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-type Option = { letter: string; text: string };
-type Round = { title: string; question: string; options: Option[]; otherAnswerIdx: number };
-
-const ROUNDS: Round[] = [
-  {
-    title: "Icebreaker Round",
-    question: "What's the most spontaneous thing you've ever done? 🌶️",
-    options: [
-      { letter: "A", text: "Booked a solo trip to Goa at 2 AM 🚗🌊" },
-      { letter: "B", text: "Tried skydiving on a random weekend 🪂" },
-      { letter: "C", text: "Said yes to a last-minute road trip 🚗" },
-    ],
-    otherAnswerIdx: 0,
-  },
-  {
-    title: "Round 2",
-    question: "If we had a free day together, what would we probably be doing? 🎯",
-    options: [
-      { letter: "A", text: "Exploring a new café, then catching a sunset 🌅" },
-      { letter: "B", text: "Hiking to somewhere quiet and peaceful 🏔️" },
-      { letter: "C", text: "Trying a new activity just for fun 🎨" },
-    ],
-    otherAnswerIdx: 0,
-  },
-  {
-    title: "Round 3",
-    question: "What's a fun fact about you that most people don't know? 🤫",
-    options: [
-      { letter: "A", text: "I can solve a Rubik's cube in under 2 minutes 🧩" },
-      { letter: "B", text: "I collect vinyls 🎵" },
-      { letter: "C", text: "I once won a talent show 🏆" },
-    ],
-    otherAnswerIdx: 0,
-  },
-];
+import { pickPackForMatch, TONES, TONE_COLOR, TONE_LABEL, type Tone } from "@/data/icebreakerPacks";
 
 const AVATARS = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
@@ -47,19 +12,36 @@ const AVATARS = [
   "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&q=80",
 ];
 
-type Stage = "answering" | "complete" | "responses" | "finished";
+type Stage = "answering" | "complete" | "responses" | "opener" | "finished";
+
+const PURPOSE_LABEL: Record<string, string> = {
+  vibe_check: "Vibe Check",
+  personality_signal: "Personality Signal",
+  action_bridge: "Action Bridge",
+};
+
+// Deterministic "their" pick per round — 60% mirrors your tone, otherwise shifts one step.
+function theirTone(matchId: string, roundIdx: number, yours: Tone): Tone {
+  const key = `${matchId}-${roundIdx}`;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  if (h % 10 < 6) return yours;
+  const order: Tone[] = ["flirty", "subtle", "neutral"];
+  return order[(order.indexOf(yours) + 1) % order.length];
+}
 
 export default function IcebreakerGamePage() {
   const { matchId } = useParams<{ matchId: string }>();
   const [, navigate] = useLocation();
   const [roundIdx, setRoundIdx] = useState(0);
   const [stage, setStage] = useState<Stage>("answering");
-  const [chosen, setChosen] = useState<number | null>(null);
-  const [myAnswers, setMyAnswers] = useState<(number | null)[]>([null, null, null]);
+  const [chosen, setChosen] = useState<Tone | null>(null);
+  const [myAnswers, setMyAnswers] = useState<(Tone | null)[]>([null, null, null]);
+  const [theirAnswers, setTheirAnswers] = useState<(Tone | null)[]>([null, null, null]);
+  const [openerChoice, setOpenerChoice] = useState<Tone | null>(null);
   const [responsesTab, setResponsesTab] = useState<"you" | "them">("you");
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
-  const accent = roundIdx === 0 ? "#FF1B8D" : "#00CFFF";
 
   const { data: matchData } = useQuery({
     queryKey: [`/api/matches/${matchId}`],
@@ -83,15 +65,19 @@ export default function IcebreakerGamePage() {
   const otherPhoto = (otherUser?.photos as string[])?.[0] || AVATARS[(otherUser?.id || 1) % AVATARS.length];
   const venueName = match?.venueName || "The Basement";
 
-  const round = ROUNDS[roundIdx];
-  const isLastRound = roundIdx === ROUNDS.length - 1;
+  const pack = useMemo(
+    () => pickPackForMatch(matchId || "0", match?.venueType || match?.venueName),
+    [matchId, match?.venueType, match?.venueName]
+  );
 
-  // Auto-scroll to top on round change
+  const round = pack.questions[roundIdx];
+  const isLastRound = roundIdx === pack.questions.length - 1;
+  const accent = chosen ? TONE_COLOR[chosen] : TONE_COLOR[myAnswers[roundIdx] || "flirty"];
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [roundIdx, stage]);
 
-  // Keyboard escape closes responses modal
   useEffect(() => {
     if (stage !== "responses") return;
     const onKey = (e: KeyboardEvent) => {
@@ -115,10 +101,15 @@ export default function IcebreakerGamePage() {
     if (chosen === null || sending) return;
     setSending(true);
     try {
-      await postMessage(`🎮 Round ${roundIdx + 1}: "${round.options[chosen].text}"`);
-      const next = [...myAnswers];
-      next[roundIdx] = chosen;
-      setMyAnswers(next);
+      const myText = round.options[chosen];
+      await postMessage(`🎮 Round ${roundIdx + 1} · ${PURPOSE_LABEL[round.purpose]}\nQ: ${round.question}\nA: ${myText}`);
+      const my = [...myAnswers];
+      my[roundIdx] = chosen;
+      setMyAnswers(my);
+      const tt = theirTone(matchId || "0", roundIdx, chosen);
+      const tn = [...theirAnswers];
+      tn[roundIdx] = tt;
+      setTheirAnswers(tn);
       setStage("complete");
     } catch {
       toast({ title: "Couldn't send answer", description: "Tap to try again.", variant: "destructive" });
@@ -128,9 +119,13 @@ export default function IcebreakerGamePage() {
   };
 
   const handleSkip = () => {
-    const next = [...myAnswers];
-    next[roundIdx] = -1; // skipped marker
-    setMyAnswers(next);
+    const my = [...myAnswers];
+    my[roundIdx] = "neutral";
+    setMyAnswers(my);
+    const tt = theirTone(matchId || "0", roundIdx, "neutral");
+    const tn = [...theirAnswers];
+    tn[roundIdx] = tt;
+    setTheirAnswers(tn);
     setStage("complete");
   };
 
@@ -139,27 +134,43 @@ export default function IcebreakerGamePage() {
     setStage("responses");
   };
 
-  const handleContinue = async () => {
+  const handleContinue = () => {
     if (isLastRound) {
-      setStage("finished");
-      try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`/api/matches/${matchId}/icebreaker`, {
-          method: "PATCH",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Failed to unlock chat");
-        await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}`] });
-        await queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
-      } catch {
-        toast({ title: "Couldn't unlock chat", description: "Please try again.", variant: "destructive" });
-      }
-      setTimeout(() => navigate(`/chat/${matchId}`), 1500);
+      // Default opener choice based on the user's dominant tone across the 3 rounds.
+      const counts: Record<Tone, number> = { flirty: 0, subtle: 0, neutral: 0 };
+      myAnswers.forEach((t) => t && counts[t]++);
+      const dominant = (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "subtle") as Tone;
+      setOpenerChoice(dominant);
+      setStage("opener");
       return;
     }
     setRoundIdx((i) => i + 1);
     setChosen(null);
     setStage("answering");
+  };
+
+  const handleSendOpener = async () => {
+    if (!openerChoice || sending) return;
+    setSending(true);
+    try {
+      // Unlock chat FIRST — backend gates non-"🎮 Round" messages until icebreakerCompleted is true.
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/matches/${matchId}/icebreaker`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to unlock chat");
+      // Now send the opener as the user's first real chat message.
+      await postMessage(pack.openers[openerChoice]);
+      await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}`] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      setStage("finished");
+      setTimeout(() => navigate(`/chat/${matchId}`), 1100);
+    } catch {
+      toast({ title: "Couldn't send opener", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
   };
 
   // ============ FINISHED STATE ============
@@ -168,8 +179,104 @@ export default function IcebreakerGamePage() {
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: "#0A0A0C" }}>
         <div className="text-center">
           <div className="text-6xl mb-4">🎉</div>
-          <h1 className="text-2xl font-extrabold mb-2">All 3 rounds complete!</h1>
+          <h1 className="text-2xl font-extrabold mb-2">Chat unlocked!</h1>
           <p className="text-icebreaker-muted">Opening your chat with {otherName}...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ============ OPENER STAGE ============
+  if (stage === "opener") {
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>
+        <div className="flex items-center justify-between px-4 pt-4 pb-3">
+          <button
+            onClick={() => setStage("complete")}
+            className="w-9 h-9 flex items-center justify-center"
+            aria-label="Back"
+            data-testid="button-opener-back"
+          >
+            <ArrowLeft className="w-5 h-5 text-white" />
+          </button>
+          <div className="flex items-center gap-2.5 flex-1 ml-2">
+            <img src={otherPhoto} alt={otherName} className="w-9 h-9 rounded-full object-cover" />
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-sm">{otherName}, {otherAge}</span>
+              </div>
+              <span className="text-[11px] text-icebreaker-muted">All 3 rounds complete</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 flex-1 flex flex-col">
+          <div className="flex justify-center mb-3">
+            <div
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+              style={{ background: "rgba(255,27,141,0.1)", border: "1px solid rgba(255,27,141,0.3)" }}
+            >
+              <MessageCircle className="w-3 h-3 text-icebreaker-coral" />
+              <span className="text-[11px] font-bold text-icebreaker-coral">Send your first message</span>
+            </div>
+          </div>
+
+          <h2 className="text-center text-[22px] font-extrabold leading-tight mb-2 px-2">
+            Pick an opener that fits your vibe.
+          </h2>
+          <p className="text-center text-sm text-icebreaker-muted mb-6">
+            Tuned to both your answers — tap one to send.
+          </p>
+
+          <div className="space-y-3 mb-5">
+            {TONES.map((t) => {
+              const isPicked = openerChoice === t;
+              const c = TONE_COLOR[t];
+              return (
+                <button
+                  key={t}
+                  onClick={() => setOpenerChoice(t)}
+                  className="w-full text-left rounded-2xl p-4 transition-all active:scale-[0.99]"
+                  style={
+                    isPicked
+                      ? { background: `${c}15`, border: `1.5px solid ${c}`, boxShadow: `0 0 20px ${c}40` }
+                      : { background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)" }
+                  }
+                  data-testid={`opener-${t}`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full"
+                      style={{ background: `${c}22`, color: c }}
+                    >
+                      {TONE_LABEL[t]}
+                    </span>
+                  </div>
+                  <p className="text-[14px] font-semibold text-white leading-snug">
+                    "{pack.openers[t]}"
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="pb-6 mt-auto">
+            <button
+              onClick={handleSendOpener}
+              disabled={!openerChoice || sending}
+              className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+              style={{
+                background: openerChoice
+                  ? `linear-gradient(135deg, ${TONE_COLOR[openerChoice]}, ${TONE_COLOR[openerChoice]}cc)`
+                  : "#252530",
+                boxShadow: openerChoice ? `0 4px 20px ${TONE_COLOR[openerChoice]}66` : "none",
+              }}
+              data-testid="button-send-opener"
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {sending ? "Sending..." : "Send & Unlock Chat"}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -203,23 +310,18 @@ export default function IcebreakerGamePage() {
       </div>
 
       {/* ============ PROGRESS TRACKER ============ */}
-      <div className="px-8 mb-4">
+      <div className="px-8 mb-3">
         <div className="flex items-center justify-between relative">
-          {/* Background line */}
           <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2" style={{ background: "rgba(255,255,255,0.1)" }} />
-          {/* Filled line */}
           <div
             className="absolute left-0 top-1/2 h-0.5 -translate-y-1/2 transition-all"
-            style={{
-              width: `${(roundIdx / (ROUNDS.length - 1)) * 100}%`,
-              background: accent,
-            }}
+            style={{ width: `${(roundIdx / (pack.questions.length - 1)) * 100}%`, background: accent }}
           />
-          {ROUNDS.map((_, i) => {
-            const dotColor = i === 0 ? "#FF1B8D" : "#00CFFF";
+          {pack.questions.map((_, i) => {
             const isComplete = i < roundIdx || (i === roundIdx && stage !== "answering");
-            const isCurrent = i === roundIdx && stage === "answering";
             const isPending = i > roundIdx;
+            const isCurrent = i === roundIdx && stage === "answering";
+            const dotColor = myAnswers[i] ? TONE_COLOR[myAnswers[i]!] : (i === 0 ? "#FF1B8D" : i === 1 ? "#00CFFF" : "#FF6B9D");
             return (
               <div
                 key={i}
@@ -235,37 +337,46 @@ export default function IcebreakerGamePage() {
             );
           })}
         </div>
-        <p className="text-center text-[11px] text-icebreaker-muted font-bold tracking-widest mt-3">
-          ROUND {roundIdx + 1} OF {ROUNDS.length}
+        <p className="text-center text-[10px] text-icebreaker-muted font-bold tracking-widest mt-2">
+          {pack.roundTitle.toUpperCase()} · {PURPOSE_LABEL[round.purpose].toUpperCase()} · {roundIdx + 1}/{pack.questions.length}
         </p>
       </div>
 
       {/* ============ ANSWERING STAGE ============ */}
       {stage === "answering" && (
         <div className="flex-1 flex flex-col px-5">
-          {/* Show other person's previous answer for rounds 2 & 3 */}
-          {roundIdx > 0 && myAnswers[roundIdx - 1] !== null && (
-            <>
+          {/* Conversational recap of previous round */}
+          {roundIdx > 0 && myAnswers[roundIdx - 1] && theirAnswers[roundIdx - 1] && (
+            <div className="mb-3 rounded-2xl p-3"
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
               <div className="flex items-center gap-1.5 mb-2">
                 <Sparkles className="w-3 h-3 text-icebreaker-coral" />
-                <span className="text-xs font-bold text-icebreaker-coral">{otherName} answered</span>
+                <span className="text-[10px] font-extrabold text-icebreaker-coral uppercase tracking-wider">
+                  Last round, between you two
+                </span>
               </div>
-              <div
-                className="px-4 py-3 rounded-2xl mb-2"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-                data-testid="text-other-answer"
-              >
-                <p className="text-sm font-semibold text-white">
-                  {ROUNDS[roundIdx - 1].options[ROUNDS[roundIdx - 1].otherAnswerIdx].text}
-                </p>
+              <div className="space-y-1.5">
+                <div className="flex items-start gap-2">
+                  <span className="text-[10px] font-bold text-icebreaker-muted w-10 shrink-0 pt-0.5">YOU</span>
+                  <span className="text-[12px] font-semibold text-white">
+                    {pack.questions[roundIdx - 1].options[myAnswers[roundIdx - 1]!]}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[10px] font-bold text-icebreaker-teal w-10 shrink-0 pt-0.5">{otherName.toUpperCase().slice(0, 4)}</span>
+                  <span className="text-[12px] font-semibold text-white">
+                    {pack.questions[roundIdx - 1].options[theirAnswers[roundIdx - 1]!]}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-center mb-2">
-                <ArrowDown className="w-4 h-4 text-icebreaker-muted" />
+              <div className="flex items-center justify-center mt-2">
+                <ArrowDown className="w-3.5 h-3.5 text-icebreaker-muted" />
               </div>
-              <p className="text-center text-sm font-bold mb-4" style={{ color: accent }}>
-                {isLastRound ? `Your last question for ${otherName}` : "Now it's your turn!"}
+              <p className="text-center text-[11px] text-white/80 font-semibold">
+                Building on that — your next move:
               </p>
-            </>
+            </div>
           )}
 
           {/* Round 1 only: icebreaker pill */}
@@ -276,56 +387,50 @@ export default function IcebreakerGamePage() {
                 style={{ background: "rgba(0,207,255,0.1)", border: "1px solid rgba(0,207,255,0.3)" }}
               >
                 <Sparkles className="w-3 h-3 text-icebreaker-teal" />
-                <span className="text-[11px] font-bold text-icebreaker-teal">Icebreaker Round</span>
+                <span className="text-[11px] font-bold text-icebreaker-teal">{pack.roundTitle}</span>
               </div>
             </div>
           )}
 
-          {/* Main question */}
-          <h2 className="text-center text-[22px] font-extrabold leading-tight mb-3 px-2" data-testid="text-question">
+          <h2 className="text-center text-[22px] font-extrabold leading-tight mb-2 px-2" data-testid="text-question">
             {round.question}
           </h2>
 
-          {/* Sub-hint for round 1 */}
-          {roundIdx === 0 && (
-            <div className="flex items-center justify-center gap-1.5 mb-6">
-              <Sparkles className="w-3 h-3 text-icebreaker-coral" />
-              <span className="text-[11px] text-icebreaker-muted">{otherName}'s answer will be sent to you</span>
-            </div>
-          )}
+          <p className="text-center text-[11px] text-icebreaker-muted mb-5">
+            Pick your tone — your answer becomes a message to {otherName}.
+          </p>
 
-          {roundIdx > 0 && <div className="mb-6" />}
-
-          {/* Options */}
+          {/* Tone-coded options */}
           <div className="space-y-3 mb-5">
-            {round.options.map((opt, i) => {
-              const isPicked = chosen === i;
-              const dotColor = accent;
+            {TONES.map((t) => {
+              const isPicked = chosen === t;
+              const c = TONE_COLOR[t];
               return (
                 <button
-                  key={i}
-                  onClick={() => setChosen(i)}
+                  key={t}
+                  onClick={() => setChosen(t)}
                   className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all text-left active:scale-[0.98]"
                   style={
                     isPicked
-                      ? { background: `${dotColor}15`, border: `1.5px solid ${dotColor}`, boxShadow: `0 0 20px ${dotColor}40` }
+                      ? { background: `${c}15`, border: `1.5px solid ${c}`, boxShadow: `0 0 20px ${c}40` }
                       : { background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)" }
                   }
-                  data-testid={`option-${opt.letter.toLowerCase()}`}
+                  data-testid={`option-${t}`}
                 >
                   <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-extrabold text-sm"
-                    style={{ background: dotColor, color: "white" }}
+                    className="flex flex-col items-center justify-center flex-shrink-0 rounded-full"
+                    style={{ background: c, color: "white", width: 44, height: 44 }}
                   >
-                    {opt.letter}
+                    <span className="text-[9px] font-extrabold uppercase tracking-wider leading-none">
+                      {TONE_LABEL[t].slice(0, 3)}
+                    </span>
                   </div>
-                  <span className="text-[13px] font-semibold text-white leading-snug flex-1">{opt.text}</span>
+                  <span className="text-[13px] font-semibold text-white leading-snug flex-1">{round.options[t]}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Helper text */}
           <div
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl mb-3"
             style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
@@ -336,11 +441,10 @@ export default function IcebreakerGamePage() {
                 <span className="text-[11px] text-icebreaker-muted">Complete this round to unlock chat</span>
               </>
             ) : (
-              <span className="text-[11px] text-icebreaker-muted">Your answer will become a question for {otherName}</span>
+              <span className="text-[11px] text-icebreaker-muted">Your answer becomes a question for {otherName}</span>
             )}
           </div>
 
-          {/* Bottom action */}
           <div className="pb-6 space-y-2">
             {chosen !== null ? (
               <button
@@ -348,10 +452,8 @@ export default function IcebreakerGamePage() {
                 disabled={sending}
                 className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
                 style={{
-                  background: roundIdx === 0
-                    ? "linear-gradient(135deg, #FF1B8D, #d6007a)"
-                    : "linear-gradient(135deg, #00CFFF, #0099cc)",
-                  boxShadow: `0 4px 20px ${accent}66`,
+                  background: `linear-gradient(135deg, ${TONE_COLOR[chosen]}, ${TONE_COLOR[chosen]}cc)`,
+                  boxShadow: `0 4px 20px ${TONE_COLOR[chosen]}66`,
                 }}
                 data-testid="button-send-answer"
               >
@@ -375,7 +477,6 @@ export default function IcebreakerGamePage() {
       {/* ============ ROUND COMPLETE CELEBRATION ============ */}
       {stage === "complete" && (
         <div className="flex-1 flex flex-col items-center justify-center px-6 relative overflow-hidden">
-          {/* Confetti dots */}
           <div className="absolute inset-0 pointer-events-none">
             {[...Array(20)].map((_, i) => {
               const colors = ["#FF1B8D", "#00CFFF", "#FFD700", "#FF6B9D"];
@@ -385,45 +486,28 @@ export default function IcebreakerGamePage() {
                 <div
                   key={i}
                   className="absolute w-1.5 h-1.5 rounded-full"
-                  style={{
-                    background: colors[i % colors.length],
-                    left: `${left}%`,
-                    top: `${top}%`,
-                    opacity: 0.7,
-                  }}
+                  style={{ background: colors[i % colors.length], left: `${left}%`, top: `${top}%`, opacity: 0.7 }}
                 />
               );
             })}
           </div>
 
-          {/* Two avatars with heart */}
           <div className="flex items-center justify-center mb-6 relative z-10">
-            <img
-              src={myPhoto}
-              alt={myName}
-              className="w-20 h-20 rounded-full object-cover"
-              style={{ border: "3px solid #FF1B8D" }}
-            />
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center -mx-2 z-10"
-              style={{ background: "linear-gradient(135deg, #FF1B8D, #FF6B9D)" }}
-            >
+            <img src={myPhoto} alt={myName} className="w-20 h-20 rounded-full object-cover" style={{ border: `3px solid ${TONE_COLOR[myAnswers[roundIdx] || "flirty"]}` }} />
+            <div className="w-10 h-10 rounded-full flex items-center justify-center -mx-2 z-10" style={{ background: "linear-gradient(135deg, #FF1B8D, #FF6B9D)" }}>
               <span className="text-lg">💗</span>
             </div>
-            <img
-              src={otherPhoto}
-              alt={otherName}
-              className="w-20 h-20 rounded-full object-cover"
-              style={{ border: "3px solid #00CFFF" }}
-            />
+            <img src={otherPhoto} alt={otherName} className="w-20 h-20 rounded-full object-cover" style={{ border: `3px solid ${TONE_COLOR[theirAnswers[roundIdx] || "subtle"]}` }} />
           </div>
 
           <div className="flex items-center gap-1.5 mb-2 relative z-10">
             <Sparkles className="w-4 h-4 text-icebreaker-coral" />
             <h2 className="text-xl font-extrabold">Round {roundIdx + 1} Complete!</h2>
           </div>
-          <p className="text-icebreaker-muted text-sm mb-8 text-center relative z-10">
-            Great answers! You're a good match.
+          <p className="text-icebreaker-muted text-sm mb-6 text-center relative z-10 max-w-xs">
+            {myAnswers[roundIdx] === theirAnswers[roundIdx]
+              ? `You both went ${TONE_LABEL[myAnswers[roundIdx]!].toLowerCase()} — same wavelength.`
+              : `You went ${TONE_LABEL[myAnswers[roundIdx]!].toLowerCase()}, ${otherName} went ${TONE_LABEL[theirAnswers[roundIdx]!].toLowerCase()}. Nice contrast.`}
           </p>
 
           <div className="w-full space-y-3 relative z-10">
@@ -431,9 +515,7 @@ export default function IcebreakerGamePage() {
               onClick={handleViewResponses}
               className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm"
               style={{
-                background: roundIdx === 0
-                  ? "linear-gradient(135deg, #FF1B8D, #d6007a)"
-                  : "linear-gradient(135deg, #00CFFF, #0099cc)",
+                background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
                 boxShadow: `0 4px 20px ${accent}66`,
               }}
               data-testid="button-view-responses"
@@ -446,7 +528,7 @@ export default function IcebreakerGamePage() {
               style={{ background: "transparent", border: "1.5px solid rgba(0,207,255,0.4)" }}
               data-testid="button-continue"
             >
-              {isLastRound ? "Start Chatting" : `Start Round ${roundIdx + 2}`}
+              {isLastRound ? "Pick Your Opener" : `Start Round ${roundIdx + 2}`}
             </button>
           </div>
         </div>
@@ -480,19 +562,13 @@ export default function IcebreakerGamePage() {
               </button>
             </div>
 
-            {/* Tab toggle */}
-            <div
-              className="flex p-1 rounded-2xl"
-              style={{ background: "rgba(255,255,255,0.04)" }}
-            >
+            <div className="flex p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)" }}>
               <button
                 onClick={() => setResponsesTab("you")}
                 className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-all"
-                style={
-                  responsesTab === "you"
-                    ? { background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "white" }
-                    : { color: "#8A8FA8" }
-                }
+                style={responsesTab === "you"
+                  ? { background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "white" }
+                  : { color: "#8A8FA8" }}
                 data-testid="tab-your-answer"
               >
                 Your answer
@@ -500,70 +576,52 @@ export default function IcebreakerGamePage() {
               <button
                 onClick={() => setResponsesTab("them")}
                 className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-all"
-                style={
-                  responsesTab === "them"
-                    ? { background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "white" }
-                    : { color: "#8A8FA8" }
-                }
+                style={responsesTab === "them"
+                  ? { background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "white" }
+                  : { color: "#8A8FA8" }}
                 data-testid="tab-other-answer"
               >
                 {otherName}'s answer
               </button>
             </div>
 
-            {/* Both answers display */}
             <div className="space-y-3">
-              <div>
-                <p className="text-icebreaker-coral text-xs font-bold mb-1.5">
-                  {responsesTab === "you" ? "You answered" : `${otherName} answered`}
-                </p>
-                <div
-                  className="px-4 py-3 rounded-2xl"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-                >
-                  <p className="text-sm font-semibold">
-                    {responsesTab === "you"
-                      ? myAnswers[roundIdx] !== null && myAnswers[roundIdx]! >= 0
-                        ? round.options[myAnswers[roundIdx]!].text
-                        : "You skipped this question"
-                      : round.options[round.otherAnswerIdx].text}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-center">
-                <ArrowDown className="w-4 h-4 text-icebreaker-muted" />
-              </div>
-
-              <div>
-                <p className="text-icebreaker-coral text-xs font-bold mb-1.5">
-                  {responsesTab === "you" ? `${otherName} answered` : "You answered"}
-                </p>
-                <div
-                  className="px-4 py-3 rounded-2xl"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-                >
-                  <p className="text-sm font-semibold">
-                    {responsesTab === "you"
-                      ? round.options[round.otherAnswerIdx].text
-                      : myAnswers[roundIdx] !== null && myAnswers[roundIdx]! >= 0
-                      ? round.options[myAnswers[roundIdx]!].text
-                      : "You skipped this question"}
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const yourTone = myAnswers[roundIdx];
+                const theirT = theirAnswers[roundIdx];
+                const topTone = responsesTab === "you" ? yourTone : theirT;
+                const bottomTone = responsesTab === "you" ? theirT : yourTone;
+                const topLabel = responsesTab === "you" ? "You answered" : `${otherName} answered`;
+                const bottomLabel = responsesTab === "you" ? `${otherName} answered` : "You answered";
+                return (
+                  <>
+                    <div>
+                      <p className="text-icebreaker-coral text-xs font-bold mb-1.5">{topLabel}</p>
+                      <div className="px-4 py-3 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${topTone ? TONE_COLOR[topTone] + "55" : "rgba(255,255,255,0.08)"}` }}>
+                        <p className="text-sm font-semibold">{topTone ? round.options[topTone] : "—"}</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-center">
+                      <ArrowDown className="w-4 h-4 text-icebreaker-muted" />
+                    </div>
+                    <div>
+                      <p className="text-icebreaker-coral text-xs font-bold mb-1.5">{bottomLabel}</p>
+                      <div className="px-4 py-3 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${bottomTone ? TONE_COLOR[bottomTone] + "55" : "rgba(255,255,255,0.08)"}` }}>
+                        <p className="text-sm font-semibold">{bottomTone ? round.options[bottomTone] : "—"}</p>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             <button
               onClick={handleContinue}
               className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm"
-              style={{
-                background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                boxShadow: `0 4px 20px ${accent}66`,
-              }}
+              style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, boxShadow: `0 4px 20px ${accent}66` }}
               data-testid="button-continue-modal"
             >
-              {isLastRound ? "Start Chatting" : `Continue to Round ${roundIdx + 2}`}
+              {isLastRound ? "Pick Your Opener" : `Continue to Round ${roundIdx + 2}`}
             </button>
           </div>
         </div>
