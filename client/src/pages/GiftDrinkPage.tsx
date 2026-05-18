@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { X, Sparkles, MapPin, Clock } from "lucide-react";
+import { X, Sparkles, MapPin, Clock, Heart } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -48,10 +48,31 @@ export default function GiftDrinkPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
       toast({ title: "🎉 Drink voucher sent!", description: `${DRINKS[selected].name} on its way to ${recipient?.name}` });
-      navigate(-1 as any);
+      window.history.back();
     },
     onError: (err: any) => {
       toast({ title: err.message || "Failed to send gift", variant: "destructive" });
+    }
+  });
+
+  const sendLike = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/swipe", {
+      swipedId: parseInt(userId),
+      liked: true
+    }),
+    onSuccess: async (res: any) => {
+      const data = await res.json().catch(() => ({}));
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      if (data?.match) {
+        toast({ title: "💖 It's a match!", description: `You and ${recipient?.name} liked each other` });
+        navigate(`/match/${data.match.id}`);
+      } else {
+        toast({ title: "💖 Like sent!", description: `${recipient?.name} will know you're interested` });
+        window.history.back();
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: err.message || "Couldn't send like", variant: "destructive" });
     }
   });
 
@@ -64,7 +85,7 @@ export default function GiftDrinkPage() {
     <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-5 pb-3">
-        <button onClick={() => navigate(-1 as any)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <button onClick={() => window.history.back()} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }} data-testid="button-close" aria-label="Close">
           <X className="w-4 h-4 text-white" />
         </button>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: "rgba(0,207,255,0.1)", border: "1px solid rgba(0,207,255,0.25)" }}>
@@ -155,10 +176,19 @@ export default function GiftDrinkPage() {
       </div>
 
       {/* CTA */}
-      <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-3" style={{ background: "linear-gradient(to top, #0A0A0C 60%, transparent)" }}>
+      <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-3 space-y-2" style={{ background: "linear-gradient(to top, #0A0A0C 60%, transparent)" }}>
+        <button
+          onClick={() => sendLike.mutate()}
+          disabled={sendLike.isPending || sendGift.isPending}
+          className="w-full h-12 rounded-full font-bold text-white text-sm flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+          style={{ background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(0,207,255,0.4)", color: "#00CFFF" }}
+          data-testid="button-send-like"
+        >
+          <Heart className="w-4 h-4" /> {sendLike.isPending ? "Sending…" : "Send a Like"}
+        </button>
         <button
           onClick={() => sendGift.mutate()}
-          disabled={sendGift.isPending || !canAfford}
+          disabled={sendGift.isPending || sendLike.isPending || !canAfford}
           className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
           style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
           data-testid="button-send-drink"
