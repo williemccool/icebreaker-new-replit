@@ -135,7 +135,14 @@ import type { Express } from "express";
         // TODO: Send actual SMS via Twilio
         console.log(`OTP for ${phone}: ${otp}`);
         
-        res.json({ success: true, message: "OTP sent successfully" });
+        const response: { success: boolean; message: string; devOtp?: string } = {
+          success: true,
+          message: "OTP sent successfully"
+        };
+        if (process.env.NODE_ENV !== "production") {
+          response.devOtp = otp;
+        }
+        res.json(response);
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
