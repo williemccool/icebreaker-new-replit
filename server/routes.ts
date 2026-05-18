@@ -580,6 +580,25 @@ import type { Express } from "express";
       }
     });
     
+    // Mark match icebreaker as completed
+    app.patch("/api/matches/:id/icebreaker", authMiddleware, async (req: any, res) => {
+      try {
+        const matchId = parseInt(req.params.id);
+        const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+        if (!match) return res.status(404).json({ error: "Match not found" });
+        if (match.userAId !== req.userId && match.userBId !== req.userId) {
+          return res.status(403).json({ error: "Not authorized" });
+        }
+        const [updated] = await db.update(matches)
+          .set({ icebreakerCompleted: true })
+          .where(eq(matches.id, matchId))
+          .returning();
+        res.json(updated);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Get user matches
     app.get("/api/matches", authMiddleware, async (req: any, res) => {
       try {
@@ -655,8 +674,15 @@ import type { Express } from "express";
         if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
           return res.status(403).json({ error: "Access denied" });
         }
-        
+
         const { body } = req.body;
+
+        // Lock free chat until icebreaker is completed. Icebreaker round posts
+        // are allowed through so the game can persist its answers to the thread.
+        const isIcebreakerPost = typeof body === "string" && body.startsWith("🎮 Round");
+        if (!match.icebreakerCompleted && !isIcebreakerPost) {
+          return res.status(403).json({ error: "Complete the icebreaker first" });
+        }
         
         const [message] = await db.insert(messages).values({
           matchId,
