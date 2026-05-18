@@ -7,6 +7,8 @@ import { Home, MessageCircle, User, Radio } from "lucide-react";
 
 // Pages
 import AuthPage from "./pages/AuthPage";
+import IntroPage from "./pages/IntroPage";
+import SelfieVerifyPage from "./pages/SelfieVerifyPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import TutorialPage from "./pages/TutorialPage";
 import HomePage from "./pages/HomePage";
@@ -76,11 +78,31 @@ function BottomNav() {
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [seenIntro, setSeenIntro] = useState(true);
+  const [needsSelfie, setNeedsSelfie] = useState(false);
+  const [checkingVerified, setCheckingVerified] = useState(false);
+
+  const checkVerification = async () => {
+    setCheckingVerified(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/user/me", { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        const user = data?.user || data;
+        if (user) localStorage.setItem("user", JSON.stringify(user));
+        setNeedsSelfie(!user?.verified);
+      }
+    } catch {}
+    setCheckingVerified(false);
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     setIsAuthenticated(!!token);
+    setSeenIntro(!!localStorage.getItem("seenIntro"));
     setIsLoading(false);
+    if (token) checkVerification();
   }, []);
 
   if (isLoading) {
@@ -97,7 +119,25 @@ function App() {
   if (!isAuthenticated) {
     return (
       <QueryClientProvider client={queryClient}>
-        <AuthPage onAuth={() => setIsAuthenticated(true)} />
+        {!seenIntro ? (
+          <IntroPage onDone={() => setSeenIntro(true)} />
+        ) : (
+          <AuthPage
+            onAuth={() => {
+              setIsAuthenticated(true);
+              checkVerification();
+            }}
+          />
+        )}
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
+
+  if (needsSelfie) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <SelfieVerifyPage onDone={() => setNeedsSelfie(false)} />
         <Toaster />
       </QueryClientProvider>
     );

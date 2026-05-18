@@ -12,6 +12,7 @@ import type { Express } from "express";
   import bcrypt from "bcryptjs";
   import jwt from "jsonwebtoken";
   import { nanoid } from "nanoid";
+  import crypto from "crypto";
 
   const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
@@ -364,6 +365,44 @@ import type { Express } from "express";
       }
     });
     
+    // Verify selfie (front-camera capture). Stores a hash, marks user verified,
+    // and grants the verification reward (50 XP + 1 Cube) on first success.
+    app.post("/api/user/verify-selfie", authMiddleware, async (req: any, res) => {
+      try {
+        const { selfie } = req.body || {};
+        if (typeof selfie !== "string" || !selfie.startsWith("data:image/")) {
+          return res.status(400).json({ error: "Invalid selfie payload" });
+        }
+        // Very small sanity check — base64 payload should be non-trivial
+        const b64 = selfie.split(",")[1] || "";
+        if (b64.length < 1000) {
+          return res.status(400).json({ error: "Selfie image too small to verify" });
+        }
+        const hash = crypto.createHash("sha256").update(b64).digest("hex");
+
+        const [existing] = await db.select().from(users).where(eq(users.id, req.userId)).limit(1);
+        const wasVerified = !!existing?.verified;
+
+        const [updated] = await db.update(users)
+          .set({ verified: true, selfieHash: hash, updatedAt: new Date() })
+          .where(eq(users.id, req.userId))
+          .returning();
+
+        if (!wasVerified) {
+          await db.update(cubeWallets)
+            .set({
+              balance: sql`balance + 1`,
+              totalEarned: sql`total_earned + 1`,
+            })
+            .where(eq(cubeWallets.userId, req.userId));
+        }
+
+        res.json({ verified: true, user: updated, rewarded: !wasVerified });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Update preferences
     app.put("/api/user/preferences", authMiddleware, async (req: any, res) => {
       try {
