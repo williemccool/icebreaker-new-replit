@@ -135,7 +135,14 @@ import type { Express } from "express";
         // TODO: Send actual SMS via Twilio
         console.log(`OTP for ${phone}: ${otp}`);
         
-        res.json({ success: true, message: "OTP sent successfully" });
+        const response: { success: boolean; message: string; devOtp?: string } = {
+          success: true,
+          message: "OTP sent successfully"
+        };
+        if (process.env.NODE_ENV !== "production") {
+          response.devOtp = otp;
+        }
+        res.json(response);
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
@@ -145,24 +152,45 @@ import type { Express } from "express";
     app.post("/api/auth/verify-otp", async (req, res) => {
       try {
         const { phone, otp } = req.body;
-        
-        const [verification] = await db.select().from(otpVerifications)
-          .where(and(
-            eq(otpVerifications.phone, phone),
-            eq(otpVerifications.otp, otp),
-            eq(otpVerifications.verified, false),
-            gte(otpVerifications.expiresAt, new Date())
-          ))
-          .limit(1);
-        
-        if (!verification) {
-          return res.status(400).json({ error: "Invalid or expired OTP" });
+        const isDev = process.env.NODE_ENV !== "production";
+
+        let verification: typeof otpVerifications.$inferSelect | undefined;
+
+        // Dev master code: 123456 always works in non-production
+        const devBypass = isDev && otp === "123456";
+
+        if (!devBypass) {
+          [verification] = await db.select().from(otpVerifications)
+            .where(and(
+              eq(otpVerifications.phone, phone),
+              eq(otpVerifications.otp, otp),
+              eq(otpVerifications.verified, false),
+              gte(otpVerifications.expiresAt, new Date())
+            ))
+            .limit(1);
+
+          // Dev fallback: if no exact match, accept the latest unverified OTP
+          // for this phone (kills race conditions with auto-fill in dev).
+          if (!verification && isDev) {
+            [verification] = await db.select().from(otpVerifications)
+              .where(and(
+                eq(otpVerifications.phone, phone),
+                eq(otpVerifications.verified, false),
+                gte(otpVerifications.expiresAt, new Date())
+              ))
+              .orderBy(desc(otpVerifications.id))
+              .limit(1);
+          }
+
+          if (!verification) {
+            return res.status(400).json({ error: "Invalid or expired OTP" });
+          }
+
+          // Mark as verified
+          await db.update(otpVerifications)
+            .set({ verified: true })
+            .where(eq(otpVerifications.id, verification.id));
         }
-        
-        // Mark as verified
-        await db.update(otpVerifications)
-          .set({ verified: true })
-          .where(eq(otpVerifications.id, verification.id));
         
         // Check if user exists
         let [user] = await db.select().from(users)
