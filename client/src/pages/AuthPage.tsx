@@ -8,6 +8,7 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"welcome" | "phone" | "otp">("welcome");
   const [loading, setLoading] = useState(false);
+  const [devOtp, setDevOtp] = useState<string | null>(null);
   const { toast } = useToast();
 
   const sendOTP = async () => {
@@ -23,8 +24,16 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
         body: JSON.stringify({ phone })
       });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
         setStep("otp");
-        toast({ title: "OTP sent!" });
+        if (data?.devOtp) {
+          setDevOtp(data.devOtp);
+          setOtp(data.devOtp);
+          toast({ title: `Dev OTP: ${data.devOtp}`, description: "Auto-filled for development" });
+        } else {
+          setDevOtp(null);
+          toast({ title: "OTP sent!" });
+        }
       } else {
         toast({ title: "Failed to send OTP", variant: "destructive" });
       }
@@ -96,7 +105,18 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
         {step === "otp" && (
           <>
             <h2 className="text-2xl font-extrabold text-white text-center mb-1">Enter code</h2>
-            <p className="text-icebreaker-muted text-sm text-center mb-8">Sent to {phone}</p>
+            <p className="text-icebreaker-muted text-sm text-center mb-4">Sent to {phone}</p>
+            {devOtp && (
+              <div
+                className="w-full mb-4 px-4 py-3 rounded-2xl text-center"
+                style={{ background: "rgba(0,207,255,0.08)", border: "1px solid rgba(0,207,255,0.35)" }}
+                data-testid="text-dev-otp"
+              >
+                <div className="text-[10px] uppercase tracking-widest text-icebreaker-teal font-bold">Dev mode</div>
+                <div className="text-white text-xl font-extrabold tracking-[0.4em]">{devOtp}</div>
+                <div className="text-[10px] text-icebreaker-muted mt-1">Auto-filled · not shown in production</div>
+              </div>
+            )}
             <div className="w-full mb-4">
               <Input
                 type="text"
