@@ -33,7 +33,8 @@ import NotFoundPage from "./pages/not-found";
 
 const HIDE_NAV_ROUTES = [
   "/auth", "/onboarding", "/tutorial",
-  "/match/", "/game/", "/gift/", "/payment", "/safety"
+  "/match/", "/game/", "/gift/", "/payment", "/safety",
+  "/rooms/", // hide on /rooms/:id and /rooms/:id/entry — list page /rooms stays visible
 ];
 
 const NAV_ITEMS = [

@@ -38,7 +38,13 @@ export default function ChatPage() {
   });
 
   useEffect(() => {
-    if (messageData) setMessages(messageData);
+    if (messageData) {
+      // Hide icebreaker round system messages — the conversational opener becomes the first real message.
+      const visible = (Array.isArray(messageData) ? messageData : []).filter(
+        (m: any) => typeof m?.body === "string" && !m.body.startsWith("🎮 Round")
+      );
+      setMessages(visible);
+    }
   }, [messageData]);
 
   useEffect(() => {
@@ -55,7 +61,9 @@ export default function ChatPage() {
     });
     if (res.ok) {
       const msg = await res.json();
-      setMessages(prev => [...prev, msg]);
+      if (!(typeof msg?.body === "string" && msg.body.startsWith("🎮 Round"))) {
+        setMessages(prev => [...prev, msg]);
+      }
       setNewMessage("");
     }
   };
