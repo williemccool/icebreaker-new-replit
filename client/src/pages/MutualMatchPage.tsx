@@ -60,14 +60,14 @@ export default function MutualMatchPage() {
 
         {/* Text */}
         <h1 className="text-5xl font-extrabold tracking-tight text-center text-white mb-3" data-testid="match-title">
-          ICE BROKEN!
+          IT'S A MATCH!
         </h1>
         <p className="text-base text-center mb-1">
           You matched at{" "}
           <span className="font-bold" style={{ color: "#00CFFF" }}>{match?.venueName || "Neon High"}</span>
         </p>
         <p className="text-sm text-icebreaker-muted text-center mb-10">
-          The challenge is complete. Time to make your move!
+          Play a quick 3-round icebreaker to unlock free chat.
         </p>
 
         {/* CTAs */}

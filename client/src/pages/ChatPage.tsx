@@ -61,7 +61,7 @@ export default function ChatPage() {
   };
 
   const otherUser = matchData?.otherUser;
-  const icebreakerCompleted = matchData?.icebreakerCompleted ?? false;
+  const icebreakerCompleted = matchData?.match?.icebreakerCompleted ?? false;
 
   if (matchLoading || !matchData) {
     return <div className="min-h-screen" style={{ background: "#0A0A0C" }} />;
