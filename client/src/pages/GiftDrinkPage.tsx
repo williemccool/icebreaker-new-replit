@@ -107,7 +107,7 @@ export default function GiftDrinkPage() {
             )}
             <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-green-400 border-2 border-icebreaker-bg" />
           </div>
-          <h2 className="text-xl font-extrabold tracking-tight">Treat {recipient?.name || "them"}</h2>
+          <h2 className="text-xl font-extrabold tracking-tight">Treat {recipient?.name?.split(" ")[0] || "them"}</h2>
           <div className="flex items-center gap-1.5 mt-1 text-icebreaker-muted text-xs">
             <MapPin className="w-3 h-3" />
             <span>{recipient?.city || "Bangalore"} • nearby</span>
