@@ -24,7 +24,14 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
         body: JSON.stringify({ phone })
       });
       if (res.ok) {
-        const data = await res.json().catch(() => ({}));
+        let data: { devOtp?: string } = {};
+        try {
+          data = await res.json();
+        } catch (err) {
+          console.error("Failed to parse send-otp response", err);
+          toast({ title: "Unexpected server response", variant: "destructive" });
+          return;
+        }
         setStep("otp");
         if (data?.devOtp) {
           setDevOtp(data.devOtp);
