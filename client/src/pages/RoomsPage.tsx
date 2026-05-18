@@ -43,10 +43,7 @@ export default function RoomsPage() {
       <div className="flex items-center justify-between px-4 pt-5 pb-3">
         <div>
           <h1 className="text-xl font-extrabold tracking-tight">Icebreaker Live</h1>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <MapPin className="w-3 h-3 text-icebreaker-muted" />
-            <span className="text-xs text-icebreaker-muted font-semibold">Happening now near Indiranagar</span>
-          </div>
+          <p className="text-xs text-icebreaker-muted font-semibold mt-0.5">Real venues. Virtual rooms.</p>
         </div>
         <button className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
           <Bell className="w-4 h-4 text-icebreaker-muted" />
@@ -125,7 +122,7 @@ export default function RoomsPage() {
 
                 {/* Join button */}
                 <button
-                  onClick={() => !isFull && navigate(`/rooms/${room.id}`)}
+                  onClick={() => !isFull && navigate(`/rooms/${room.id}/entry`)}
                   disabled={isFull}
                   className="w-full h-12 rounded-2xl font-bold text-white text-sm flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
                   style={isFull ? { background: "rgba(255,255,255,0.06)" } : { background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 20px rgba(255,27,141,0.4)" }}
