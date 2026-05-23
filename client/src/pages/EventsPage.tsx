@@ -6,12 +6,26 @@ import { useToast } from "@/hooks/use-toast";
 export default function EventsPage() {
   const { toast } = useToast();
 
-  const { data: events, isLoading } = useQuery({
-    queryKey: ["/api/events"],
+  const { data: userData } = useQuery<any>({
+    queryKey: ["/api/user/me"],
     queryFn: async () => {
-      const res = await fetch("/api/events?city=Bangalore");
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/user/me", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) return null;
       return res.json();
-    }
+    },
+  });
+  const city = userData?.user?.city || "Bangalore";
+
+  const { data: events, isLoading } = useQuery({
+    queryKey: ["/api/events", city],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/events?city=${encodeURIComponent(city)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return res.json();
+    },
   });
 
   const purchaseTicket = async (eventId: number) => {
