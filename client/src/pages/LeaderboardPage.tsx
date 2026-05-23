@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Trophy, Medal, Sparkles } from "lucide-react";
+import { Link } from "wouter";
+import { Trophy, Medal, Sparkles, ArrowLeft } from "lucide-react";
 
 export default function LeaderboardPage() {
   const { data: leaderboard, isLoading } = useQuery({
@@ -22,9 +23,16 @@ export default function LeaderboardPage() {
   return (
     <div className="min-h-screen pb-24">
       <div className="page-header">
-        <div className="max-w-lg mx-auto">
-          <h1 className="text-xl font-extrabold tracking-tight">Leaderboard</h1>
-          <p className="text-xs text-icebreaker-muted mt-0.5">Season 1 · Bangalore</p>
+        <div className="max-w-lg mx-auto flex items-center gap-3">
+          <Link href="/rewards">
+            <button className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="button-back">
+              <ArrowLeft className="w-4 h-4 text-icebreaker-muted" />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight">Leaderboard</h1>
+            <p className="text-xs text-icebreaker-muted mt-0.5">Season 1 · Bangalore</p>
+          </div>
         </div>
       </div>
 

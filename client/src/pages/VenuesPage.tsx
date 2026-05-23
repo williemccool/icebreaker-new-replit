@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { MapPin, Users, Star, Zap } from "lucide-react";
+import { MapPin, Users, Star, Zap, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,9 +34,16 @@ export default function VenuesPage() {
   return (
     <div className="min-h-screen pb-24">
       <div className="page-header">
-        <div className="max-w-lg mx-auto">
-          <h1 className="text-xl font-extrabold tracking-tight">Venues Near You</h1>
-          <p className="text-xs text-icebreaker-muted mt-0.5">Bangalore · {venues?.length || 0} venues</p>
+        <div className="max-w-lg mx-auto flex items-center gap-3">
+          <Link href="/">
+            <button className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="button-back">
+              <ArrowLeft className="w-4 h-4 text-icebreaker-muted" />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight">Venues Near You</h1>
+            <p className="text-xs text-icebreaker-muted mt-0.5">Bangalore · {venues?.length || 0} venues</p>
+          </div>
         </div>
       </div>
 

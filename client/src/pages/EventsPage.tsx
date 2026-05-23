@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, Ticket, Users, Clock } from "lucide-react";
+import { Calendar, MapPin, Ticket, Users, Clock, ArrowLeft } from "lucide-react";
+import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
 export default function EventsPage() {
@@ -45,9 +46,16 @@ export default function EventsPage() {
   return (
     <div className="min-h-screen pb-24">
       <div className="page-header">
-        <div className="max-w-lg mx-auto">
-          <h1 className="text-xl font-extrabold tracking-tight">Events</h1>
-          <p className="text-xs text-icebreaker-muted mt-0.5">Speed dating, mixers & parties</p>
+        <div className="max-w-lg mx-auto flex items-center gap-3">
+          <Link href="/">
+            <button className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }} data-testid="button-back">
+              <ArrowLeft className="w-4 h-4 text-icebreaker-muted" />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight">Events</h1>
+            <p className="text-xs text-icebreaker-muted mt-0.5">Speed dating, mixers & parties</p>
+          </div>
         </div>
       </div>
 
