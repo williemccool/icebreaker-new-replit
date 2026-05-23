@@ -55,7 +55,7 @@ export default function RoomDiscoveryPage() {
 
   const profiles = (data?.participants || []).map((u: any, i: number) => ({
     ...u,
-    photo: AVATARS[i % AVATARS.length],
+    photo: (u.photos as string[])?.[0] || AVATARS[i % AVATARS.length],
     prompt: PROMPTS[i % PROMPTS.length],
     answer: u.bio || ANSWERS[i % ANSWERS.length],
     age: u.dob ? Math.floor((Date.now() - new Date(u.dob).getTime()) / (365.25 * 24 * 3600 * 1000)) : 24,

@@ -29,7 +29,8 @@ export default function HomePage() {
   const { data: rooms } = useQuery({
     queryKey: ["/api/rooms"],
     queryFn: async () => {
-      const res = await fetch("/api/rooms");
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/rooms", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       return res.json();
     }
   });
@@ -37,7 +38,8 @@ export default function HomePage() {
   const { data: events } = useQuery({
     queryKey: ["/api/events"],
     queryFn: async () => {
-      const res = await fetch("/api/events?city=Bangalore");
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/events", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       return res.json();
     }
   });
