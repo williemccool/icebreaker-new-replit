@@ -8,6 +8,7 @@ import type { Express } from "express";
     cubeWallets, cubeTransactions, quests, questProgress, seasons,
     leaderboards, subscriptions, drinkGifts, dateBookings, crews, crewMembers, badges, userBadges
   } from "@shared/schema";
+  import { getPackById, pickOtherTone, renderRoundPath, validateIcebreakerRound } from "@shared/icebreakerPacks";
   import { eq, and, or, desc, sql, gte, lte, isNull } from "drizzle-orm";
   import bcrypt from "bcryptjs";
   import jwt from "jsonwebtoken";
@@ -42,11 +43,27 @@ import type { Express } from "express";
       }
     });
 
+    // Require a valid JWT on the Socket.IO handshake. The decoded userId becomes
+    // the trusted sender identity for any socket event.
+    io.use((socket, next) => {
+      try {
+        const token =
+          (socket.handshake.auth as any)?.token ||
+          (socket.handshake.headers as any)?.authorization?.replace(/^Bearer\s+/i, "");
+        if (!token) return next(new Error("Unauthorized"));
+        const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
+        (socket.data as any).userId = decoded.userId;
+        next();
+      } catch {
+        next(new Error("Unauthorized"));
+      }
+    });
+
     // Socket.IO for real-time features
     const activeUsers = new Map<number, string>();
     
     io.on("connection", (socket) => {
-      console.log("User connected:", socket.id);
+      console.log("User connected:", socket.id, "userId:", (socket.data as any)?.userId);
       
       socket.on("user:online", (userId: number) => {
         activeUsers.set(userId, socket.id);
@@ -91,17 +108,32 @@ import type { Express } from "express";
         io.to(`room:${roomId}`).emit("room:user_left", { userId });
       });
       
+      // Authenticated chat send. Sender identity comes from the socket's JWT, not
+      // from the client payload. Membership and icebreaker gate are enforced.
       socket.on("message:send", async (data) => {
-        const { matchId, senderId, body } = data;
-        
-        const [message] = await db.insert(messages).values({
-          matchId,
-          senderId,
-          body,
-          meta: {}
-        }).returning();
-        
-        io.to(`match:${matchId}`).emit("message:received", message);
+        try {
+          const authedUserId: number | undefined = (socket.data as any)?.userId;
+          if (!authedUserId) return;
+          const matchId = Number(data?.matchId);
+          const body = typeof data?.body === "string" ? data.body : "";
+          if (!matchId || !body) return;
+
+          const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+          if (!match) return;
+          if (match.userAId !== authedUserId && match.userBId !== authedUserId) return;
+          if (!match.icebreakerCompleted) return;
+
+          const [message] = await db.insert(messages).values({
+            matchId,
+            senderId: authedUserId,
+            body,
+            meta: {},
+          }).returning();
+
+          io.to(`match:${matchId}`).emit("message:received", message);
+        } catch {
+          // swallow socket errors
+        }
       });
       
       socket.on("disconnect", () => {
@@ -619,24 +651,66 @@ import type { Express } from "express";
       }
     });
     
-    // Mark match icebreaker as completed
-    app.patch("/api/matches/:id/icebreaker", authMiddleware, async (req: any, res) => {
+    // Atomic 3-turn icebreaker conversation. Client submits only the pack id and its
+    // two tone picks; the server resolves the conversation text from the canonical pack
+    // and derives Person 2's reply tone deterministically. This prevents clients from
+    // forging messages attributed to the other user.
+    app.post("/api/matches/:id/icebreaker-conversation", authMiddleware, async (req: any, res) => {
       try {
         const matchId = parseInt(req.params.id);
-        const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
-        if (!match) return res.status(404).json({ error: "Match not found" });
-        if (match.userAId !== req.userId && match.userBId !== req.userId) {
-          return res.status(403).json({ error: "Not authorized" });
+        const { packId, turn1Tone, turn3Tone } = req.body || {};
+        const validTones = ["flirty", "subtle", "neutral"];
+        if (typeof packId !== "string" || !validTones.includes(turn1Tone) || !validTones.includes(turn3Tone)) {
+          return res.status(400).json({ error: "packId, turn1Tone, turn3Tone required" });
         }
-        const [updated] = await db.update(matches)
-          .set({ icebreakerCompleted: true })
-          .where(eq(matches.id, matchId))
-          .returning();
-        res.json(updated);
+        const pack = getPackById(packId);
+        if (!pack) return res.status(400).json({ error: "Unknown packId" });
+
+        const result = await db.transaction(async (tx) => {
+          const [match] = await tx.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+          if (!match) return { code: 404, body: { error: "Match not found" } };
+          if (match.userAId !== req.userId && match.userBId !== req.userId) {
+            return { code: 403, body: { error: "Not authorized" } };
+          }
+          if (match.icebreakerCompleted) {
+            return { code: 409, body: { error: "Icebreaker already completed" } };
+          }
+          const otherId = match.userAId === req.userId ? match.userBId : match.userAId;
+          const turn2Tone = pickOtherTone(String(matchId), 2, turn1Tone);
+          const round = renderRoundPath(pack, turn1Tone, turn2Tone);
+          if (!validateIcebreakerRound(round)) {
+            return { code: 500, body: { error: "Pack failed validation" } };
+          }
+          const turn1Body = pack.turn1_options[turn1Tone as keyof typeof pack.turn1_options];
+          const turn2Body = pack.turn2_options[turn1Tone as keyof typeof pack.turn2_options][turn2Tone];
+          const turn3Body = pack.turn3_options[turn2Tone][turn3Tone as keyof typeof pack.turn1_options];
+
+          // Compare-and-set: only the first concurrent winner flips the flag.
+          const claimed = await tx.update(matches)
+            .set({ icebreakerCompleted: true })
+            .where(and(eq(matches.id, matchId), eq(matches.icebreakerCompleted, false)))
+            .returning();
+          if (claimed.length === 0) {
+            return { code: 409, body: { error: "Icebreaker already completed" } };
+          }
+
+          const inserted = await tx.insert(messages).values([
+            { matchId, senderId: req.userId, body: turn1Body, meta: { icebreaker: true, turn: 1, packId, tone: turn1Tone } },
+            { matchId, senderId: otherId, body: turn2Body, meta: { icebreaker: true, turn: 2, packId, tone: turn2Tone } },
+            { matchId, senderId: req.userId, body: turn3Body, meta: { icebreaker: true, turn: 3, packId, tone: turn3Tone } },
+          ]).returning();
+          return { code: 200, body: { messages: inserted, turn2Tone } };
+        });
+
+        return res.status(result.code).json(result.body);
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
+
+    // (Removed) PATCH /api/matches/:id/icebreaker — completion is only granted
+    // through POST /api/matches/:id/icebreaker-conversation so the canonical
+    // 3-message conversation always exists when chat is unlocked.
 
     // Get user matches
     app.get("/api/matches", authMiddleware, async (req: any, res) => {
@@ -716,10 +790,9 @@ import type { Express } from "express";
 
         const { body } = req.body;
 
-        // Lock free chat until icebreaker is completed. Icebreaker round posts
-        // are allowed through so the game can persist its answers to the thread.
-        const isIcebreakerPost = typeof body === "string" && body.startsWith("🎮 Round");
-        if (!match.icebreakerCompleted && !isIcebreakerPost) {
+        // Free chat is locked until the icebreaker conversation has been completed via
+        // POST /api/matches/:id/icebreaker-conversation. No prefix-based bypass.
+        if (!match.icebreakerCompleted) {
           return res.status(403).json({ error: "Complete the icebreaker first" });
         }
         

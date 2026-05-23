@@ -1,10 +1,17 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Check, Sparkles, X, Send, Lock, ArrowDown, Loader2, MessageCircle } from "lucide-react";
+import { ArrowLeft, Sparkles, Send, Loader2, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { pickPackForMatch, TONES, TONE_COLOR, TONE_LABEL, type Tone } from "@/data/icebreakerPacks";
+import {
+  pickPackForMatch,
+  pickOtherTone,
+  TONES,
+  TONE_COLOR,
+  TONE_LABEL,
+  type Tone,
+} from "@/data/icebreakerPacks";
 
 const AVATARS = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
@@ -12,36 +19,25 @@ const AVATARS = [
   "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&q=80",
 ];
 
-type Stage = "answering" | "complete" | "responses" | "opener" | "finished";
+type Stage = "turn1" | "typing" | "turn2_reveal" | "turn3" | "submitting" | "done";
 
-const PURPOSE_LABEL: Record<string, string> = {
-  vibe_check: "Vibe Check",
-  personality_signal: "Personality Signal",
-  action_bridge: "Action Bridge",
+const TURN_LABEL: Record<number, string> = {
+  1: "Your move",
+  2: "Their reply",
+  3: "Your reply",
 };
-
-// Deterministic "their" pick per round — 60% mirrors your tone, otherwise shifts one step.
-function theirTone(matchId: string, roundIdx: number, yours: Tone): Tone {
-  const key = `${matchId}-${roundIdx}`;
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  if (h % 10 < 6) return yours;
-  const order: Tone[] = ["flirty", "subtle", "neutral"];
-  return order[(order.indexOf(yours) + 1) % order.length];
-}
 
 export default function IcebreakerGamePage() {
   const { matchId } = useParams<{ matchId: string }>();
   const [, navigate] = useLocation();
-  const [roundIdx, setRoundIdx] = useState(0);
-  const [stage, setStage] = useState<Stage>("answering");
-  const [chosen, setChosen] = useState<Tone | null>(null);
-  const [myAnswers, setMyAnswers] = useState<(Tone | null)[]>([null, null, null]);
-  const [theirAnswers, setTheirAnswers] = useState<(Tone | null)[]>([null, null, null]);
-  const [openerChoice, setOpenerChoice] = useState<Tone | null>(null);
-  const [responsesTab, setResponsesTab] = useState<"you" | "them">("you");
-  const [sending, setSending] = useState(false);
   const { toast } = useToast();
+
+  const [stage, setStage] = useState<Stage>("turn1");
+  const [turn1Tone, setTurn1Tone] = useState<Tone | null>(null);
+  const [turn2Tone, setTurn2Tone] = useState<Tone | null>(null);
+  const [turn3Tone, setTurn3Tone] = useState<Tone | null>(null);
+
+  const threadEndRef = useRef<HTMLDivElement>(null);
 
   const { data: matchData } = useQuery({
     queryKey: [`/api/matches/${matchId}`],
@@ -63,118 +59,72 @@ export default function IcebreakerGamePage() {
     ? Math.floor((Date.now() - new Date(otherUser.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
     : 24;
   const otherPhoto = (otherUser?.photos as string[])?.[0] || AVATARS[(otherUser?.id || 1) % AVATARS.length];
-  const venueName = match?.venueName || "The Basement";
+  const venueName = match?.venueName || "the venue";
 
   const pack = useMemo(
     () => pickPackForMatch(matchId || "0", match?.venueType || match?.venueName),
     [matchId, match?.venueType, match?.venueName]
   );
 
-  const round = pack.questions[roundIdx];
-  const isLastRound = roundIdx === pack.questions.length - 1;
-  const accent = chosen ? TONE_COLOR[chosen] : TONE_COLOR[myAnswers[roundIdx] || "flirty"];
+  // Derived texts for the current path
+  const turn1Text = turn1Tone ? pack.turn1_options[turn1Tone] : null;
+  const turn2Text = turn1Tone && turn2Tone ? pack.turn2_options[turn1Tone][turn2Tone] : null;
+  const turn3Text =
+    turn1Tone && turn2Tone && turn3Tone ? pack.turn3_options[turn2Tone][turn3Tone] : null;
+
+  // When user picks turn1, kick off the typing animation, then deterministically pick turn2 for "them".
+  useEffect(() => {
+    if (stage !== "typing" || !turn1Tone) return;
+    const t = setTimeout(() => {
+      const tt = pickOtherTone(matchId || "0", 2, turn1Tone);
+      setTurn2Tone(tt);
+      setStage("turn2_reveal");
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [stage, turn1Tone, matchId]);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [roundIdx, stage]);
+    threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [stage, turn1Tone, turn2Tone, turn3Tone]);
 
-  useEffect(() => {
-    if (stage !== "responses") return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setStage("complete");
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [stage]);
-
-  const postMessage = async (body: string) => {
-    const token = localStorage.getItem("token");
-    const res = await fetch(`/api/matches/${matchId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ body }),
-    });
-    if (!res.ok) throw new Error("Failed to send answer");
+  const handlePickTurn1 = (t: Tone) => {
+    setTurn1Tone(t);
+    setStage("typing");
   };
 
-  const handleConfirm = async () => {
-    if (chosen === null || sending) return;
-    setSending(true);
+  const handleContinueToTurn3 = () => setStage("turn3");
+
+  const handleSubmit = async () => {
+    if (!turn1Tone || !turn2Tone || !turn3Tone) return;
+    setStage("submitting");
     try {
-      const myText = round.options[chosen];
-      await postMessage(`🎮 Round ${roundIdx + 1} · ${PURPOSE_LABEL[round.purpose]}\nQ: ${round.question}\nA: ${myText}`);
-      const my = [...myAnswers];
-      my[roundIdx] = chosen;
-      setMyAnswers(my);
-      const tt = theirTone(matchId || "0", roundIdx, chosen);
-      const tn = [...theirAnswers];
-      tn[roundIdx] = tt;
-      setTheirAnswers(tn);
-      setStage("complete");
-    } catch {
-      toast({ title: "Couldn't send answer", description: "Tap to try again.", variant: "destructive" });
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleSkip = () => {
-    const my = [...myAnswers];
-    my[roundIdx] = "neutral";
-    setMyAnswers(my);
-    const tt = theirTone(matchId || "0", roundIdx, "neutral");
-    const tn = [...theirAnswers];
-    tn[roundIdx] = tt;
-    setTheirAnswers(tn);
-    setStage("complete");
-  };
-
-  const handleViewResponses = () => {
-    setResponsesTab("you");
-    setStage("responses");
-  };
-
-  const handleContinue = () => {
-    if (isLastRound) {
-      // Default opener choice based on the user's dominant tone across the 3 rounds.
-      const counts: Record<Tone, number> = { flirty: 0, subtle: 0, neutral: 0 };
-      myAnswers.forEach((t) => t && counts[t]++);
-      const dominant = (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "subtle") as Tone;
-      setOpenerChoice(dominant);
-      setStage("opener");
-      return;
-    }
-    setRoundIdx((i) => i + 1);
-    setChosen(null);
-    setStage("answering");
-  };
-
-  const handleSendOpener = async () => {
-    if (!openerChoice || sending) return;
-    setSending(true);
-    try {
-      // Unlock chat FIRST — backend gates non-"🎮 Round" messages until icebreakerCompleted is true.
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/matches/${matchId}/icebreaker`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`/api/matches/${matchId}/icebreaker-conversation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ packId: pack.id, turn1Tone, turn3Tone }),
       });
-      if (!res.ok) throw new Error("Failed to unlock chat");
-      // Now send the opener as the user's first real chat message.
-      await postMessage(pack.openers[openerChoice]);
+      if (!res.ok) {
+        if (res.status === 409) {
+          await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}/messages`] });
+          navigate(`/chat/${matchId}`);
+          return;
+        }
+        throw new Error("Failed to save conversation");
+      }
       await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}`] });
+      await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}/messages`] });
       await queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
-      setStage("finished");
-      setTimeout(() => navigate(`/chat/${matchId}`), 1100);
+      setStage("done");
+      setTimeout(() => navigate(`/chat/${matchId}`), 1000);
     } catch {
-      toast({ title: "Couldn't send opener", description: "Please try again.", variant: "destructive" });
-    } finally {
-      setSending(false);
+      toast({ title: "Couldn't save the chat", description: "Please try again.", variant: "destructive" });
+      setStage("turn3");
     }
   };
 
-  // ============ FINISHED STATE ============
-  if (stage === "finished") {
+  // ============ DONE STATE ============
+  if (stage === "done") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: "#0A0A0C" }}>
         <div className="text-center">
@@ -186,110 +136,23 @@ export default function IcebreakerGamePage() {
     );
   }
 
-  // ============ OPENER STAGE ============
-  if (stage === "opener") {
-    return (
-      <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>
-        <div className="flex items-center justify-between px-4 pt-4 pb-3">
-          <button
-            onClick={() => setStage("complete")}
-            className="w-9 h-9 flex items-center justify-center"
-            aria-label="Back"
-            data-testid="button-opener-back"
-          >
-            <ArrowLeft className="w-5 h-5 text-white" />
-          </button>
-          <div className="flex items-center gap-2.5 flex-1 ml-2">
-            <img src={otherPhoto} alt={otherName} className="w-9 h-9 rounded-full object-cover" />
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-sm">{otherName}, {otherAge}</span>
-              </div>
-              <span className="text-[11px] text-icebreaker-muted">All 3 rounds complete</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-5 flex-1 flex flex-col">
-          <div className="flex justify-center mb-3">
-            <div
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-              style={{ background: "rgba(255,27,141,0.1)", border: "1px solid rgba(255,27,141,0.3)" }}
-            >
-              <MessageCircle className="w-3 h-3 text-icebreaker-coral" />
-              <span className="text-[11px] font-bold text-icebreaker-coral">Send your first message</span>
-            </div>
-          </div>
-
-          <h2 className="text-center text-[22px] font-extrabold leading-tight mb-2 px-2">
-            Pick an opener that fits your vibe.
-          </h2>
-          <p className="text-center text-sm text-icebreaker-muted mb-6">
-            Tuned to both your answers — tap one to send.
-          </p>
-
-          <div className="space-y-3 mb-5">
-            {TONES.map((t) => {
-              const isPicked = openerChoice === t;
-              const c = TONE_COLOR[t];
-              return (
-                <button
-                  key={t}
-                  onClick={() => setOpenerChoice(t)}
-                  className="w-full text-left rounded-2xl p-4 transition-all active:scale-[0.99]"
-                  style={
-                    isPicked
-                      ? { background: `${c}15`, border: `1.5px solid ${c}`, boxShadow: `0 0 20px ${c}40` }
-                      : { background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)" }
-                  }
-                  data-testid={`opener-${t}`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span
-                      className="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-full"
-                      style={{ background: `${c}22`, color: c }}
-                    >
-                      {TONE_LABEL[t]}
-                    </span>
-                  </div>
-                  <p className="text-[14px] font-semibold text-white leading-snug">
-                    "{pack.openers[t]}"
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="pb-6 mt-auto">
-            <button
-              onClick={handleSendOpener}
-              disabled={!openerChoice || sending}
-              className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60"
-              style={{
-                background: openerChoice
-                  ? `linear-gradient(135deg, ${TONE_COLOR[openerChoice]}, ${TONE_COLOR[openerChoice]}cc)`
-                  : "#252530",
-                boxShadow: openerChoice ? `0 4px 20px ${TONE_COLOR[openerChoice]}66` : "none",
-              }}
-              data-testid="button-send-opener"
-            >
-              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              {sending ? "Sending..." : "Send & Unlock Chat"}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Which turn are we on?
+  const currentTurn = stage === "turn1" ? 1 : stage === "typing" || stage === "turn2_reveal" ? 2 : 3;
+  const accent =
+    stage === "turn3"
+      ? TONE_COLOR[turn3Tone || "flirty"]
+      : turn1Tone
+      ? TONE_COLOR[turn1Tone]
+      : "#FF1B8D";
 
   return (
-    <div className="min-h-screen flex flex-col relative" style={{ background: "#0A0A0C" }}>
+    <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>
       {/* ============ HEADER ============ */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3">
         <button
           onClick={() => navigate(`/chat/${matchId}`)}
           className="w-9 h-9 flex items-center justify-center"
-          aria-label="Back to chat"
+          aria-label="Back"
           data-testid="button-back"
         >
           <ArrowLeft className="w-5 h-5 text-white" />
@@ -309,323 +172,257 @@ export default function IcebreakerGamePage() {
         </div>
       </div>
 
-      {/* ============ PROGRESS TRACKER ============ */}
+      {/* ============ PROGRESS ============ */}
       <div className="px-8 mb-3">
         <div className="flex items-center justify-between relative">
           <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2" style={{ background: "rgba(255,255,255,0.1)" }} />
           <div
             className="absolute left-0 top-1/2 h-0.5 -translate-y-1/2 transition-all"
-            style={{ width: `${(roundIdx / (pack.questions.length - 1)) * 100}%`, background: accent }}
+            style={{ width: `${((currentTurn - 1) / 2) * 100}%`, background: accent }}
           />
-          {pack.questions.map((_, i) => {
-            const isComplete = i < roundIdx || (i === roundIdx && stage !== "answering");
-            const isPending = i > roundIdx;
-            const isCurrent = i === roundIdx && stage === "answering";
-            const dotColor = myAnswers[i] ? TONE_COLOR[myAnswers[i]!] : (i === 0 ? "#FF1B8D" : i === 1 ? "#00CFFF" : "#FF6B9D");
+          {[1, 2, 3].map((n) => {
+            const isComplete =
+              (n === 1 && currentTurn > 1) || (n === 2 && stage === "turn3");
+            const isCurrent = n === currentTurn;
+            const isPending = !isComplete && !isCurrent;
+            const c = isPending ? "#252530" : accent;
             return (
               <div
-                key={i}
+                key={n}
                 className="relative w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-sm z-10"
-                style={{
-                  background: isPending ? "#252530" : dotColor,
-                  color: "white",
-                  boxShadow: isCurrent ? `0 0 16px ${dotColor}99` : "none",
-                }}
+                style={{ background: c, color: "white", boxShadow: isCurrent ? `0 0 16px ${c}99` : "none" }}
               >
-                {isComplete && i < roundIdx ? <Check className="w-4 h-4" /> : i + 1}
+                {n}
               </div>
             );
           })}
         </div>
         <p className="text-center text-[10px] text-icebreaker-muted font-bold tracking-widest mt-2">
-          {pack.roundTitle.toUpperCase()} · {PURPOSE_LABEL[round.purpose].toUpperCase()} · {roundIdx + 1}/{pack.questions.length}
+          {pack.round_title.toUpperCase()} · TURN {currentTurn}/3 · {TURN_LABEL[currentTurn].toUpperCase()}
         </p>
       </div>
 
-      {/* ============ ANSWERING STAGE ============ */}
-      {stage === "answering" && (
-        <div className="flex-1 flex flex-col px-5">
-          {/* Conversational recap of previous round */}
-          {roundIdx > 0 && myAnswers[roundIdx - 1] && theirAnswers[roundIdx - 1] && (
-            <div className="mb-3 rounded-2xl p-3"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
-            >
-              <div className="flex items-center gap-1.5 mb-2">
-                <Sparkles className="w-3 h-3 text-icebreaker-coral" />
-                <span className="text-[10px] font-extrabold text-icebreaker-coral uppercase tracking-wider">
-                  Last round, between you two
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-start gap-2">
-                  <span className="text-[10px] font-bold text-icebreaker-muted w-10 shrink-0 pt-0.5">YOU</span>
-                  <span className="text-[12px] font-semibold text-white">
-                    {pack.questions[roundIdx - 1].options[myAnswers[roundIdx - 1]!]}
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-[10px] font-bold text-icebreaker-teal w-10 shrink-0 pt-0.5">{otherName.toUpperCase().slice(0, 4)}</span>
-                  <span className="text-[12px] font-semibold text-white">
-                    {pack.questions[roundIdx - 1].options[theirAnswers[roundIdx - 1]!]}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center justify-center mt-2">
-                <ArrowDown className="w-3.5 h-3.5 text-icebreaker-muted" />
-              </div>
-              <p className="text-center text-[11px] text-white/80 font-semibold">
-                Building on that — your next move:
-              </p>
-            </div>
-          )}
-
-          {/* Round 1 only: icebreaker pill */}
-          {roundIdx === 0 && (
-            <div className="flex justify-center mb-3">
-              <div
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-                style={{ background: "rgba(0,207,255,0.1)", border: "1px solid rgba(0,207,255,0.3)" }}
-              >
-                <Sparkles className="w-3 h-3 text-icebreaker-teal" />
-                <span className="text-[11px] font-bold text-icebreaker-teal">{pack.roundTitle}</span>
-              </div>
-            </div>
-          )}
-
-          <h2 className="text-center text-[22px] font-extrabold leading-tight mb-2 px-2" data-testid="text-question">
-            {round.question}
-          </h2>
-
-          <p className="text-center text-[11px] text-icebreaker-muted mb-5">
-            Pick your tone — your answer becomes a message to {otherName}.
-          </p>
-
-          {/* Tone-coded options */}
-          <div className="space-y-3 mb-5">
-            {TONES.map((t) => {
-              const isPicked = chosen === t;
-              const c = TONE_COLOR[t];
-              return (
-                <button
-                  key={t}
-                  onClick={() => setChosen(t)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all text-left active:scale-[0.98]"
-                  style={
-                    isPicked
-                      ? { background: `${c}15`, border: `1.5px solid ${c}`, boxShadow: `0 0 20px ${c}40` }
-                      : { background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)" }
-                  }
-                  data-testid={`option-${t}`}
-                >
-                  <div
-                    className="flex flex-col items-center justify-center flex-shrink-0 rounded-full"
-                    style={{ background: c, color: "white", width: 44, height: 44 }}
-                  >
-                    <span className="text-[9px] font-extrabold uppercase tracking-wider leading-none">
-                      {TONE_LABEL[t].slice(0, 3)}
-                    </span>
-                  </div>
-                  <span className="text-[13px] font-semibold text-white leading-snug flex-1">{round.options[t]}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl mb-3"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-          >
-            {isLastRound ? (
-              <>
-                <Lock className="w-3 h-3 text-icebreaker-muted" />
-                <span className="text-[11px] text-icebreaker-muted">Complete this round to unlock chat</span>
-              </>
-            ) : (
-              <span className="text-[11px] text-icebreaker-muted">Your answer becomes a question for {otherName}</span>
-            )}
-          </div>
-
-          <div className="pb-6 space-y-2">
-            {chosen !== null ? (
-              <button
-                onClick={handleConfirm}
-                disabled={sending}
-                className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-70"
-                style={{
-                  background: `linear-gradient(135deg, ${TONE_COLOR[chosen]}, ${TONE_COLOR[chosen]}cc)`,
-                  boxShadow: `0 4px 20px ${TONE_COLOR[chosen]}66`,
-                }}
-                data-testid="button-send-answer"
-              >
-                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {sending ? "Sending..." : "Send Answer"}
-              </button>
-            ) : (
-              <button
-                onClick={handleSkip}
-                className="w-full py-3.5 rounded-2xl font-extrabold text-icebreaker-teal text-sm"
-                style={{ background: "transparent", border: "1.5px solid rgba(0,207,255,0.4)" }}
-                data-testid="button-skip"
-              >
-                Skip Question
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ============ ROUND COMPLETE CELEBRATION ============ */}
-      {stage === "complete" && (
-        <div className="flex-1 flex flex-col items-center justify-center px-6 relative overflow-hidden">
-          <div className="absolute inset-0 pointer-events-none">
-            {[...Array(20)].map((_, i) => {
-              const colors = ["#FF1B8D", "#00CFFF", "#FFD700", "#FF6B9D"];
-              const left = (i * 47) % 100;
-              const top = (i * 31) % 80;
-              return (
-                <div
-                  key={i}
-                  className="absolute w-1.5 h-1.5 rounded-full"
-                  style={{ background: colors[i % colors.length], left: `${left}%`, top: `${top}%`, opacity: 0.7 }}
-                />
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-center mb-6 relative z-10">
-            <img src={myPhoto} alt={myName} className="w-20 h-20 rounded-full object-cover" style={{ border: `3px solid ${TONE_COLOR[myAnswers[roundIdx] || "flirty"]}` }} />
-            <div className="w-10 h-10 rounded-full flex items-center justify-center -mx-2 z-10" style={{ background: "linear-gradient(135deg, #FF1B8D, #FF6B9D)" }}>
-              <span className="text-lg">💗</span>
-            </div>
-            <img src={otherPhoto} alt={otherName} className="w-20 h-20 rounded-full object-cover" style={{ border: `3px solid ${TONE_COLOR[theirAnswers[roundIdx] || "subtle"]}` }} />
-          </div>
-
-          <div className="flex items-center gap-1.5 mb-2 relative z-10">
-            <Sparkles className="w-4 h-4 text-icebreaker-coral" />
-            <h2 className="text-xl font-extrabold">Round {roundIdx + 1} Complete!</h2>
-          </div>
-          <p className="text-icebreaker-muted text-sm mb-6 text-center relative z-10 max-w-xs">
-            {myAnswers[roundIdx] === theirAnswers[roundIdx]
-              ? `You both went ${TONE_LABEL[myAnswers[roundIdx]!].toLowerCase()} — same wavelength.`
-              : `You went ${TONE_LABEL[myAnswers[roundIdx]!].toLowerCase()}, ${otherName} went ${TONE_LABEL[theirAnswers[roundIdx]!].toLowerCase()}. Nice contrast.`}
-          </p>
-
-          <div className="w-full space-y-3 relative z-10">
-            <button
-              onClick={handleViewResponses}
-              className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm"
-              style={{
-                background: `linear-gradient(135deg, ${accent}, ${accent}cc)`,
-                boxShadow: `0 4px 20px ${accent}66`,
-              }}
-              data-testid="button-view-responses"
-            >
-              View Responses
-            </button>
-            <button
-              onClick={handleContinue}
-              className="w-full py-3.5 rounded-2xl font-extrabold text-icebreaker-teal text-sm"
-              style={{ background: "transparent", border: "1.5px solid rgba(0,207,255,0.4)" }}
-              data-testid="button-continue"
-            >
-              {isLastRound ? "Pick Your Opener" : `Start Round ${roundIdx + 2}`}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ============ RESPONSES MODAL ============ */}
-      {stage === "responses" && (
+      {/* ============ CONVERSATION THREAD ============ */}
+      <div className="px-5 pb-2 space-y-2">
+        {/* Turn 0: screen prompt always shown as a hint bubble at the top */}
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
-          style={{ background: "rgba(0,0,0,0.75)" }}
-          onClick={() => setStage("complete")}
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Round ${roundIdx + 1} responses`}
+          className="rounded-2xl px-4 py-3 mx-auto max-w-[85%] text-center"
+          style={{ background: "rgba(255,27,141,0.06)", border: "1px solid rgba(255,27,141,0.25)" }}
         >
-          <div
-            className="w-full max-w-lg rounded-t-3xl p-5 pb-8 space-y-4"
-            style={{ background: "#141418", border: "1px solid rgba(255,255,255,0.1)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-base">Round {roundIdx + 1} Responses</h3>
-              <button
-                onClick={() => setStage("complete")}
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: "rgba(255,255,255,0.06)" }}
-                aria-label="Close responses"
-                data-testid="button-close-responses"
-              >
-                <X className="w-4 h-4 text-white" />
-              </button>
-            </div>
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <Sparkles className="w-3 h-3 text-icebreaker-coral" />
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-icebreaker-coral">
+              Conversation prompt
+            </span>
+          </div>
+          <p className="text-[13px] font-semibold text-white leading-snug">{pack.screen_prompt}</p>
+        </div>
 
-            <div className="flex p-1 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)" }}>
-              <button
-                onClick={() => setResponsesTab("you")}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-all"
-                style={responsesTab === "you"
-                  ? { background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "white" }
-                  : { color: "#8A8FA8" }}
-                data-testid="tab-your-answer"
-              >
-                Your answer
-              </button>
-              <button
-                onClick={() => setResponsesTab("them")}
-                className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-all"
-                style={responsesTab === "them"
-                  ? { background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "white" }
-                  : { color: "#8A8FA8" }}
-                data-testid="tab-other-answer"
-              >
-                {otherName}'s answer
-              </button>
-            </div>
+        {/* Turn 1 bubble (you) */}
+        {turn1Text && (
+          <ChatBubble side="me" photo={myPhoto} text={turn1Text} tone={turn1Tone!} />
+        )}
 
-            <div className="space-y-3">
-              {(() => {
-                const yourTone = myAnswers[roundIdx];
-                const theirT = theirAnswers[roundIdx];
-                const topTone = responsesTab === "you" ? yourTone : theirT;
-                const bottomTone = responsesTab === "you" ? theirT : yourTone;
-                const topLabel = responsesTab === "you" ? "You answered" : `${otherName} answered`;
-                const bottomLabel = responsesTab === "you" ? `${otherName} answered` : "You answered";
-                return (
-                  <>
-                    <div>
-                      <p className="text-icebreaker-coral text-xs font-bold mb-1.5">{topLabel}</p>
-                      <div className="px-4 py-3 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${topTone ? TONE_COLOR[topTone] + "55" : "rgba(255,255,255,0.08)"}` }}>
-                        <p className="text-sm font-semibold">{topTone ? round.options[topTone] : "—"}</p>
-                      </div>
-                    </div>
-                    <div className="flex justify-center">
-                      <ArrowDown className="w-4 h-4 text-icebreaker-muted" />
-                    </div>
-                    <div>
-                      <p className="text-icebreaker-coral text-xs font-bold mb-1.5">{bottomLabel}</p>
-                      <div className="px-4 py-3 rounded-2xl" style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${bottomTone ? TONE_COLOR[bottomTone] + "55" : "rgba(255,255,255,0.08)"}` }}>
-                        <p className="text-sm font-semibold">{bottomTone ? round.options[bottomTone] : "—"}</p>
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-
-            <button
-              onClick={handleContinue}
-              className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm"
-              style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, boxShadow: `0 4px 20px ${accent}66` }}
-              data-testid="button-continue-modal"
+        {/* Typing indicator for Turn 2 */}
+        {stage === "typing" && (
+          <div className="flex items-end gap-2 max-w-[80%]">
+            <img src={otherPhoto} alt="" className="w-7 h-7 rounded-full object-cover" />
+            <div
+              className="rounded-2xl rounded-bl-md px-4 py-3"
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+              data-testid="typing-indicator"
             >
-              {isLastRound ? "Pick Your Opener" : `Continue to Round ${roundIdx + 2}`}
+              <div className="flex gap-1">
+                <Dot delay={0} />
+                <Dot delay={150} />
+                <Dot delay={300} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Turn 2 bubble (them) */}
+        {turn2Text && (
+          <ChatBubble side="them" photo={otherPhoto} text={turn2Text} tone={turn2Tone!} name={otherName} />
+        )}
+
+        {/* Turn 3 bubble (you) */}
+        {turn3Text && (
+          <ChatBubble side="me" photo={myPhoto} text={turn3Text} tone={turn3Tone!} />
+        )}
+
+        <div ref={threadEndRef} />
+      </div>
+
+      {/* ============ STAGE-SPECIFIC ACTIONS ============ */}
+      <div className="flex-1 flex flex-col justify-end px-5 pb-6">
+        {stage === "turn1" && (
+          <ToneOptions
+            label={`Pick how you want to open with ${otherName} — your message goes to them.`}
+            options={pack.turn1_options}
+            onPick={handlePickTurn1}
+            picked={null}
+            testidPrefix="turn1"
+          />
+        )}
+
+        {stage === "turn2_reveal" && (
+          <div className="space-y-3">
+            <p className="text-center text-[12px] text-icebreaker-muted">
+              {otherName} went <span className="font-extrabold" style={{ color: TONE_COLOR[turn2Tone!] }}>{TONE_LABEL[turn2Tone!].toLowerCase()}</span>. Your turn to reply.
+            </p>
+            <button
+              onClick={handleContinueToTurn3}
+              className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2"
+              style={{
+                background: `linear-gradient(135deg, ${TONE_COLOR[turn2Tone!]}, ${TONE_COLOR[turn2Tone!]}cc)`,
+                boxShadow: `0 4px 20px ${TONE_COLOR[turn2Tone!]}66`,
+              }}
+              data-testid="button-continue-to-turn3"
+            >
+              <MessageCircle className="w-4 h-4" /> Pick your reply
             </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {stage === "turn3" && (
+          <div className="space-y-3">
+            <ToneOptions
+              label="This becomes your conversation closer — and unlocks the chat."
+              options={pack.turn3_options[turn2Tone!]}
+              onPick={(t) => setTurn3Tone(t)}
+              picked={turn3Tone}
+              testidPrefix="turn3"
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!turn3Tone}
+              className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60"
+              style={{
+                background: turn3Tone
+                  ? `linear-gradient(135deg, ${TONE_COLOR[turn3Tone]}, ${TONE_COLOR[turn3Tone]}cc)`
+                  : "#252530",
+                boxShadow: turn3Tone ? `0 4px 20px ${TONE_COLOR[turn3Tone]}66` : "none",
+              }}
+              data-testid="button-send-and-unlock"
+            >
+              <Send className="w-4 h-4" /> Send & unlock chat
+            </button>
+          </div>
+        )}
+
+        {stage === "submitting" && (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-icebreaker-coral" />
+            <span className="ml-2 text-sm text-icebreaker-muted">Saving your conversation…</span>
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ChatBubble({
+  side,
+  photo,
+  text,
+  tone,
+  name,
+}: {
+  side: "me" | "them";
+  photo: string;
+  text: string;
+  tone: Tone;
+  name?: string;
+}) {
+  const c = TONE_COLOR[tone];
+  if (side === "me") {
+    return (
+      <div className="flex items-end gap-2 max-w-[85%] ml-auto justify-end" data-testid={`bubble-${side}`}>
+        <div
+          className="rounded-2xl rounded-br-md px-4 py-3"
+          style={{
+            background: `linear-gradient(135deg, ${c}, ${c}cc)`,
+            color: "white",
+            boxShadow: `0 4px 20px ${c}55`,
+          }}
+        >
+          <p className="text-[13px] font-semibold leading-snug">{text}</p>
+        </div>
+        <img src={photo} alt="" className="w-7 h-7 rounded-full object-cover" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-end gap-2 max-w-[85%]" data-testid={`bubble-${side}`}>
+      <img src={photo} alt="" className="w-7 h-7 rounded-full object-cover" />
+      <div
+        className="rounded-2xl rounded-bl-md px-4 py-3"
+        style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${c}55` }}
+      >
+        {name && (
+          <p className="text-[10px] font-extrabold uppercase tracking-wider mb-0.5" style={{ color: c }}>
+            {name}
+          </p>
+        )}
+        <p className="text-[13px] font-semibold text-white leading-snug">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function ToneOptions({
+  label,
+  options,
+  onPick,
+  picked,
+  testidPrefix,
+}: {
+  label: string;
+  options: Record<Tone, string>;
+  onPick: (t: Tone) => void;
+  picked: Tone | null;
+  testidPrefix: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-center text-[12px] text-icebreaker-muted px-2">{label}</p>
+      {TONES.map((t) => {
+        const isPicked = picked === t;
+        const c = TONE_COLOR[t];
+        return (
+          <button
+            key={t}
+            onClick={() => onPick(t)}
+            className="w-full flex items-start gap-3 px-4 py-3.5 rounded-2xl transition-all text-left active:scale-[0.98]"
+            style={
+              isPicked
+                ? { background: `${c}15`, border: `1.5px solid ${c}`, boxShadow: `0 0 20px ${c}40` }
+                : { background: "rgba(255,255,255,0.03)", border: "1.5px solid rgba(255,255,255,0.08)" }
+            }
+            data-testid={`${testidPrefix}-${t}`}
+          >
+            <div
+              className="flex flex-col items-center justify-center flex-shrink-0 rounded-full mt-0.5"
+              style={{ background: c, color: "white", width: 44, height: 44 }}
+            >
+              <span className="text-[9px] font-extrabold uppercase tracking-wider leading-none">
+                {TONE_LABEL[t].slice(0, 3)}
+              </span>
+            </div>
+            <span className="text-[13px] font-semibold text-white leading-snug flex-1 pt-1">{options[t]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Dot({ delay }: { delay: number }) {
+  return (
+    <span
+      className="w-1.5 h-1.5 rounded-full bg-icebreaker-muted"
+      style={{ animation: `pulse 1.2s ${delay}ms infinite ease-in-out` }}
+    />
   );
 }
