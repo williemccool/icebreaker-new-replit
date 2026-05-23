@@ -359,6 +359,80 @@ import type { Express } from "express";
       }
     });
 
+    // Simulated purchase — handles cubes / godmode / season pass
+    app.post("/api/purchase", authMiddleware, async (req: any, res) => {
+      try {
+        const { SHOP_CATALOG } = await import("../shared/shop");
+        const { sku } = req.body || {};
+        const item = SHOP_CATALOG[sku];
+        if (!item) return res.status(400).json({ error: "Unknown SKU" });
+
+        // CUBES TOP-UP
+        if (item.category === "cubes") {
+          const total = (item.cubes || 0) + (item.bonusCubes || 0);
+          await db.update(cubeWallets)
+            .set({
+              balance: sql`${cubeWallets.balance} + ${total}`,
+              totalEarned: sql`${cubeWallets.totalEarned} + ${total}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(cubeWallets.userId, req.userId));
+          await db.insert(cubeTransactions).values({
+            userId: req.userId, kind: "earn", amount: total,
+            meta: { reason: "purchase", sku, priceInPaise: item.priceInPaise },
+          });
+          return res.json({ ok: true, sku, cubesAdded: total });
+        }
+
+        // GOD MODE SUBSCRIPTION (atomic)
+        if (item.category === "godmode") {
+          const days = item.durationDays || 30;
+          const endsAt = await db.transaction(async (tx) => {
+            const [existing] = await tx.select().from(subscriptions)
+              .where(and(
+                eq(subscriptions.userId, req.userId),
+                eq(subscriptions.status, "active"),
+                gte(subscriptions.endsAt, new Date()),
+              ))
+              .orderBy(desc(subscriptions.endsAt))
+              .limit(1);
+            const startsAt = existing ? new Date(existing.endsAt) : new Date();
+            const newEndsAt = new Date(startsAt.getTime() + days * 24 * 3600 * 1000);
+            await tx.insert(subscriptions).values({
+              userId: req.userId, plan: sku, startsAt, endsAt: newEndsAt, status: "active",
+            });
+            if (existing) {
+              await tx.execute(sql`UPDATE subscriptions SET status = 'expired' WHERE id = ${existing.id}`);
+            }
+            return newEndsAt;
+          });
+          return res.json({ ok: true, sku, endsAt });
+        }
+
+        // SEASON PASS — grant a chunk of bonus cubes + flag in tx meta
+        if (item.category === "season") {
+          const bonus = 200;
+          await db.update(cubeWallets)
+            .set({
+              balance: sql`${cubeWallets.balance} + ${bonus}`,
+              totalEarned: sql`${cubeWallets.totalEarned} + ${bonus}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(cubeWallets.userId, req.userId));
+          await db.insert(cubeTransactions).values({
+            userId: req.userId, kind: "earn", amount: bonus,
+            meta: { reason: "season_pass", sku, priceInPaise: item.priceInPaise },
+          });
+          return res.json({ ok: true, sku, cubesAdded: bonus });
+        }
+
+        res.status(400).json({ error: "Unsupported category" });
+      } catch (error: any) {
+        console.error("[/api/purchase] failed", error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Get single match by ID
     app.get("/api/matches/:id", authMiddleware, async (req: any, res) => {
       try {

@@ -120,10 +120,10 @@ export default function RewardsHubPage() {
                 </div>
               </div>
             ) : (
-              <Link href="/payment">
+              <Link href="/shop?tab=godmode">
                 <button className="w-full h-12 rounded-2xl font-extrabold text-sm text-white flex items-center justify-center gap-2" style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 24px rgba(255,27,141,0.5)" }} data-testid="button-upgrade-premium">
                   <Crown className="w-4 h-4" />
-                  Upgrade to God Mode · ₹499/mo
+                  Upgrade to God Mode · from ₹499
                 </button>
               </Link>
             )}
@@ -142,6 +142,11 @@ export default function RewardsHubPage() {
                 <p className="text-base font-extrabold tracking-tight -mt-0.5">In-app currency</p>
               </div>
             </div>
+            <Link href="/shop?tab=cubes">
+              <button className="px-3 h-8 rounded-full text-xs font-extrabold flex items-center gap-1" style={{ background: "linear-gradient(135deg, #00CFFF, #008fb3)", color: "white", boxShadow: "0 0 12px rgba(0,207,255,0.4)" }} data-testid="button-topup-cubes">
+                <Sparkles className="w-3 h-3" /> Top up
+              </button>
+            </Link>
           </div>
 
           <div className="flex items-end gap-2 mb-1">
@@ -274,14 +279,36 @@ export default function RewardsHubPage() {
               })}
             </div>
 
-            <Link href="/quests">
-              <button className="w-full mt-3 h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2" style={{ background: "rgba(255,27,141,0.1)", border: "1.5px solid rgba(255,27,141,0.4)", color: "#FF1B8D" }} data-testid="button-all-quests">
-                <Award className="w-4 h-4" />
-                View all quests
-              </button>
-            </Link>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <Link href="/quests">
+                <button className="w-full h-11 rounded-2xl font-bold text-sm flex items-center justify-center gap-2" style={{ background: "rgba(255,27,141,0.1)", border: "1.5px solid rgba(255,27,141,0.4)", color: "#FF1B8D" }} data-testid="button-all-quests">
+                  <Award className="w-4 h-4" />
+                  All quests
+                </button>
+              </Link>
+              <Link href="/shop?tab=season">
+                <button className="w-full h-11 rounded-2xl font-extrabold text-sm text-black flex items-center justify-center gap-2" style={{ background: "linear-gradient(135deg, #FFD700, #FF1B8D)", boxShadow: "0 0 16px rgba(255,215,0,0.35)" }} data-testid="button-buy-season-pass">
+                  <Trophy className="w-4 h-4" />
+                  Get Season Pass
+                </button>
+              </Link>
+            </div>
           </div>
         )}
+
+        {/* Shop entry */}
+        <Link href="/shop">
+          <div className="rounded-3xl p-4 cursor-pointer flex items-center gap-3 active:scale-[0.99] transition-transform" style={{ background: "linear-gradient(135deg, #1a0e1a 0%, #0d1424 100%)", border: "1px solid rgba(255,27,141,0.3)" }} data-testid="link-shop">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #FF1B8D, #00CFFF)" }}>
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-extrabold">Shop · Cubes · Plans · Season Pass</p>
+              <p className="text-[10px] text-icebreaker-muted">Everything in one place — instant unlock</p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-icebreaker-muted" />
+          </div>
+        </Link>
 
         {/* Shortcuts */}
         <div className="grid grid-cols-2 gap-3">

@@ -24,6 +24,7 @@ import ProfilePage from "./pages/ProfilePage";
 import QuestsPage from "./pages/QuestsPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import RewardsHubPage from "./pages/RewardsHubPage";
+import ShopPage from "./pages/ShopPage";
 import MutualMatchPage from "./pages/MutualMatchPage";
 import IcebreakerGamePage from "./pages/IcebreakerGamePage";
 import GiftDrinkPage from "./pages/GiftDrinkPage";
@@ -34,7 +35,7 @@ import NotFoundPage from "./pages/not-found";
 
 const HIDE_NAV_ROUTES = [
   "/auth", "/onboarding", "/tutorial",
-  "/match/", "/game/", "/gift/", "/payment", "/safety",
+  "/match/", "/game/", "/gift/", "/payment", "/safety", "/shop",
   "/rooms/", // hide on /rooms/:id and /rooms/:id/entry — list page /rooms stays visible
 ];
 
@@ -164,6 +165,7 @@ function App() {
           <Route path="/quests" component={QuestsPage} />
           <Route path="/leaderboard" component={LeaderboardPage} />
           <Route path="/rewards" component={RewardsHubPage} />
+          <Route path="/shop" component={ShopPage} />
           <Route path="/match/:matchId" component={MutualMatchPage} />
           <Route path="/game/:matchId" component={IcebreakerGamePage} />
           <Route path="/gift/:userId" component={GiftDrinkPage} />
