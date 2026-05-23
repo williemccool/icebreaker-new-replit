@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Settings, MapPin, BadgeCheck, Heart, Users, PartyPopper, Eye, Sparkles, Trophy, ChevronRight, Shield, LogOut } from "lucide-react";
+import { Settings, MapPin, BadgeCheck, Heart, Users, PartyPopper, Eye, Sparkles, Trophy, ChevronRight, Shield, LogOut, Crown } from "lucide-react";
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("Dating");
@@ -34,7 +34,6 @@ export default function ProfilePage() {
   ];
 
   const menuItems = [
-    { label: "Quests & Rewards", href: "/quests", icon: Trophy },
     { label: "Leaderboard", href: "/leaderboard", icon: Trophy },
     { label: "Trust & Safety", href: "/safety", icon: Shield },
     { label: "My Events", href: "/events", icon: PartyPopper },
@@ -116,22 +115,26 @@ export default function ProfilePage() {
           </button>
         </Link>
 
-        {/* Cubes wallet */}
-        <div className="rounded-2xl p-4 flex items-center justify-between" style={{ background: "linear-gradient(135deg, rgba(0,207,255,0.1) 0%, rgba(255,27,141,0.08) 100%)", border: "1px solid rgba(0,207,255,0.2)" }}>
-          <div className="flex items-center gap-3">
-            <div className="icon-badge-teal">
-              <Sparkles className="w-5 h-5 text-icebreaker-teal" />
-            </div>
-            <div>
-              <p className="font-extrabold text-sm">Cubes Wallet</p>
-              <p className="text-xs text-icebreaker-muted">Earn by going out</p>
+        {/* Rewards hub — Premium / Cubes / Season Pass */}
+        <Link href="/rewards">
+          <div className="rounded-2xl p-4 relative overflow-hidden cursor-pointer active:scale-[0.99] transition-transform" style={{ background: "linear-gradient(135deg, #2a0f1f 0%, #0f1a2e 100%)", border: "1px solid rgba(255,27,141,0.4)", boxShadow: "0 0 24px rgba(255,27,141,0.18)" }} data-testid="card-rewards-entry">
+            <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full opacity-30" style={{ background: "radial-gradient(circle, #FF1B8D 0%, transparent 70%)" }} />
+            <div className="relative flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #FF1B8D, #d6007a)", boxShadow: "0 0 16px rgba(255,27,141,0.5)" }}>
+                <Crown className="w-5 h-5 text-white" fill="white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-icebreaker-coral">Rewards</p>
+                <p className="text-base font-extrabold tracking-tight">God Mode · Cubes · Season Pass</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <Sparkles className="w-3 h-3 text-icebreaker-teal" />
+                  <span className="text-xs font-bold text-icebreaker-teal" data-testid="cubes-balance">{walletData?.wallet?.balance ?? 0} cubes</span>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-icebreaker-muted flex-shrink-0" />
             </div>
           </div>
-          <div className="text-right">
-            <p className="text-xl font-extrabold text-icebreaker-teal" data-testid="cubes-balance">{walletData?.wallet?.balance ?? 0}</p>
-            <p className="text-xs text-icebreaker-muted">balance</p>
-          </div>
-        </div>
+        </Link>
 
         {/* Menu items */}
         <div className="space-y-2">

@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { MapPin, Users, Calendar, Sparkles, Bell, Radio, Mic, Trophy, ChevronRight, Heart } from "lucide-react";
+import { MapPin, Users, Calendar, Sparkles, Bell, Radio, Mic, Trophy, ChevronRight, Heart, Crown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -97,6 +97,27 @@ export default function HomePage() {
 
       <div className="max-w-lg mx-auto px-4 space-y-5 pt-4">
 
+        {/* Rewards hero — Premium + Cubes + Season Pass entry point */}
+        <Link href="/rewards">
+          <div className="rounded-2xl p-4 relative overflow-hidden cursor-pointer active:scale-[0.99] transition-transform" style={{ background: "linear-gradient(135deg, #2a0f1f 0%, #0f1a2e 100%)", border: "1px solid rgba(255,27,141,0.35)", boxShadow: "0 0 24px rgba(255,27,141,0.15)" }} data-testid="card-rewards-hero">
+            <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full opacity-30" style={{ background: "radial-gradient(circle, #FF1B8D 0%, transparent 70%)" }} />
+            <div className="absolute -left-6 -bottom-6 w-28 h-28 rounded-full opacity-20" style={{ background: "radial-gradient(circle, #00CFFF 0%, transparent 70%)" }} />
+            <div className="relative flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(135deg, #FF1B8D, #d6007a)", boxShadow: "0 0 16px rgba(255,27,141,0.5)" }}>
+                <Crown className="w-6 h-6 text-white" fill="white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-icebreaker-coral">God Mode · Cubes · Season Pass</p>
+                </div>
+                <p className="text-base font-extrabold tracking-tight">{wallet?.balance ?? 0} cubes</p>
+                <p className="text-xs text-icebreaker-muted">Premium · Quests · Leaderboard rank</p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-icebreaker-muted flex-shrink-0" />
+            </div>
+          </div>
+        </Link>
+
         {/* Go out tonight */}
         <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: "linear-gradient(135deg, #141418 0%, #1a1420 100%)", border: "1px solid rgba(255,255,255,0.07)" }}>
           <div className="absolute right-0 top-0 bottom-0 w-24 opacity-20" style={{ background: "radial-gradient(ellipse at right, #FF1B8D 0%, transparent 70%)" }} />
@@ -136,9 +157,9 @@ export default function HomePage() {
         <div className="grid grid-cols-4 gap-2">
           {[
             { label: "My venues", icon: MapPin, href: "/venues", color: "#FF1B8D" },
-            { label: "Rooms joined", icon: Users, href: "/rooms", color: "#00CFFF" },
-            { label: "My vouchers", icon: Trophy, href: "/quests", color: "#FF1B8D" },
-            { label: "Quests", icon: Sparkles, href: "/quests", color: "#00CFFF" },
+            { label: "Live rooms", icon: Users, href: "/rooms", color: "#00CFFF" },
+            { label: "Rewards", icon: Trophy, href: "/rewards", color: "#FF1B8D" },
+            { label: "Leaderboard", icon: Sparkles, href: "/leaderboard", color: "#00CFFF" },
           ].map(({ label, icon: Icon, href, color }) => (
             <Link key={href + label} href={href}>
               <div className="flex flex-col items-center gap-2 p-3 rounded-2xl cursor-pointer" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }} data-testid={`quick-action-${label.toLowerCase().replace(/ /g, "-")}`}>
