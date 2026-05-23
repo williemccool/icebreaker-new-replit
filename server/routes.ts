@@ -306,6 +306,59 @@ import type { Express } from "express";
       }
     });
 
+    // Recent cube transactions for the current user
+    app.get("/api/cubes/transactions", authMiddleware, async (req: any, res) => {
+      try {
+        const txns = await db.select().from(cubeTransactions)
+          .where(eq(cubeTransactions.userId, req.userId))
+          .orderBy(desc(cubeTransactions.createdAt))
+          .limit(20);
+        res.json(txns);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Current user's active subscription (premium / God Mode)
+    app.get("/api/me/subscription", authMiddleware, async (req: any, res) => {
+      try {
+        const [sub] = await db.select().from(subscriptions)
+          .where(and(
+            eq(subscriptions.userId, req.userId),
+            eq(subscriptions.status, "active"),
+            gte(subscriptions.endsAt, new Date())
+          ))
+          .orderBy(desc(subscriptions.endsAt))
+          .limit(1);
+        res.json({ subscription: sub || null });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Current user's leaderboard rank in the active season
+    app.get("/api/me/rank", authMiddleware, async (req: any, res) => {
+      try {
+        const [season] = await db.select().from(seasons)
+          .where(and(eq(seasons.active, true), lte(seasons.startDate, new Date()), gte(seasons.endDate, new Date())))
+          .limit(1);
+        if (!season) return res.json({ rank: null, score: 0, total: 0, season: null });
+        const [me] = await db.select().from(leaderboards)
+          .where(and(eq(leaderboards.seasonId, season.id), eq(leaderboards.userId, req.userId)))
+          .limit(1);
+        if (!me) return res.json({ rank: null, score: 0, total: 0, season });
+        const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(leaderboards)
+          .where(and(eq(leaderboards.seasonId, season.id), sql`${leaderboards.score} > ${me.score}`));
+        const [{ count: total }] = await db.select({ count: sql<number>`count(*)::int` })
+          .from(leaderboards)
+          .where(eq(leaderboards.seasonId, season.id));
+        res.json({ rank: Number(count) + 1, score: me.score, total: Number(total), season });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Get single match by ID
     app.get("/api/matches/:id", authMiddleware, async (req: any, res) => {
       try {

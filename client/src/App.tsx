@@ -23,6 +23,7 @@ import EventsPage from "./pages/EventsPage";
 import ProfilePage from "./pages/ProfilePage";
 import QuestsPage from "./pages/QuestsPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
+import RewardsHubPage from "./pages/RewardsHubPage";
 import MutualMatchPage from "./pages/MutualMatchPage";
 import IcebreakerGamePage from "./pages/IcebreakerGamePage";
 import GiftDrinkPage from "./pages/GiftDrinkPage";
@@ -162,6 +163,7 @@ function App() {
           <Route path="/profile" component={ProfilePage} />
           <Route path="/quests" component={QuestsPage} />
           <Route path="/leaderboard" component={LeaderboardPage} />
+          <Route path="/rewards" component={RewardsHubPage} />
           <Route path="/match/:matchId" component={MutualMatchPage} />
           <Route path="/game/:matchId" component={IcebreakerGamePage} />
           <Route path="/gift/:userId" component={GiftDrinkPage} />
