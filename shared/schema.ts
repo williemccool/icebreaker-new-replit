@@ -309,9 +309,11 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
     recipientId: integer("recipient_id").references(() => users.id).notNull(),
     matchId: integer("match_id").references(() => matches.id),
     drinkName: varchar("drink_name", { length: 100 }).notNull(),
+    note: text("note"),
     venueId: integer("venue_id").references(() => venues.id),
     accepted: boolean("accepted").default(false),
     redeemedAt: timestamp("redeemed_at"),
+    expiresAt: timestamp("expires_at"),
     qrCode: varchar("qr_code", { length: 100 }).unique(),
     cubesCost: integer("cubes_cost").notNull(),
     createdAt: timestamp("created_at").defaultNow()

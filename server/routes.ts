@@ -1642,58 +1642,193 @@ import type { Express, Request, Response, NextFunction } from "express";
 
     // ============ DRINK GIFTS ROUTES ============
     
+    // Canonical drink catalogue (server-authoritative pricing — never trust client).
+    const DRINK_CATALOG: Record<string, { cubes: number; localPaise: number }> = {
+      beer:     { cubes: 150, localPaise: 25000 },
+      cocktail: { cubes: 250, localPaise: 40000 },
+      mocktail: { cubes: 100, localPaise: 18000 },
+      coffee:   { cubes: 80,  localPaise: 15000 },
+      shot:     { cubes: 80,  localPaise: 15000 },
+    };
+
+    const giftSendSchema = z.object({
+      recipientId: z.number().int().positive(),
+      drinkName: z.string().min(1).max(40),
+      matchId: z.number().int().positive().optional(),
+      venueId: z.number().int().positive().optional(),
+      note: z.string().max(140).optional(),
+    });
+
     // Send drink gift
     app.post("/api/gifts/send", authMiddleware, async (req: any, res) => {
       try {
-        const { recipientId, matchId, drinkName, venueId, cubesCost } = req.body;
-        
-        // Check wallet
-        const [wallet] = await db.select().from(cubeWallets)
-          .where(eq(cubeWallets.userId, req.userId))
-          .limit(1);
-        
-        if ((wallet?.balance ?? 0) < cubesCost) {
-          return res.status(400).json({ error: "Insufficient cubes" });
+        const parsed = giftSendSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid gift payload", details: parsed.error.flatten() });
         }
-        
+        const { recipientId, drinkName, matchId, venueId, note } = parsed.data;
+
+        if (recipientId === req.userId) {
+          return res.status(400).json({ error: "You can't gift yourself a drink." });
+        }
+
+        const drinkKey = drinkName.trim().toLowerCase();
+        const drink = DRINK_CATALOG[drinkKey];
+        if (!drink) {
+          return res.status(400).json({ error: "Unknown drink type" });
+        }
+
+        // Block / report guard — don't let blocked relationships gift.
+        const blockedIds = await getBlockedUserIds(req.userId);
+        if (blockedIds.includes(recipientId)) {
+          return res.status(403).json({ error: "You can't gift this user." });
+        }
+
+        // Recipient must exist.
+        const [recipient] = await db.select().from(users).where(eq(users.id, recipientId)).limit(1);
+        if (!recipient) return res.status(404).json({ error: "Recipient not found" });
+
+        // Validate optional context: matchId must include the sender.
+        let safeMatchId: number | undefined = matchId;
+        if (matchId) {
+          const [m] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+          if (!m || (m.user1Id !== req.userId && m.user2Id !== req.userId)) {
+            safeMatchId = undefined;
+          }
+        }
+        let safeVenueId: number | undefined = venueId;
+        if (venueId) {
+          const [v] = await db.select().from(venues).where(eq(venues.id, venueId)).limit(1);
+          if (!v) safeVenueId = undefined;
+        }
+
         const qrCode = nanoid(16);
-        
-        const [gift] = await db.insert(drinkGifts).values({
-          senderId: req.userId,
-          recipientId,
-          matchId,
-          drinkName,
-          venueId,
-          cubesCost,
-          qrCode
-        }).returning();
-        
-        // Deduct cubes
-        await db.update(cubeWallets)
-          .set({ 
-            balance: sql`balance - ${cubesCost}`,
-            totalSpent: sql`total_spent + ${cubesCost}`
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        // Atomic conditional debit — only debits when balance >= cost.
+        // Prevents concurrent overspend; insufficient balance returns 0 rows.
+        const debited = await db
+          .update(cubeWallets)
+          .set({
+            balance: sql`balance - ${drink.cubes}`,
+            totalSpent: sql`total_spent + ${drink.cubes}`,
           })
-          .where(eq(cubeWallets.userId, req.userId));
-        
-        await db.insert(cubeTransactions).values({
-          userId: req.userId,
-          kind: "spend",
-          amount: cubesCost,
-          meta: { reason: "drink_gift" }
-        });
-        
-        res.json({ success: true, gift });
+          .where(and(
+            eq(cubeWallets.userId, req.userId),
+            gte(cubeWallets.balance, drink.cubes),
+          ))
+          .returning({ balance: cubeWallets.balance });
+
+        if (debited.length === 0) {
+          // Either wallet missing or insufficient balance under contention.
+          const [w] = await db.select().from(cubeWallets).where(eq(cubeWallets.userId, req.userId)).limit(1);
+          return res.status(402).json({ error: "Insufficient cubes", needed: drink.cubes, balance: w?.balance ?? 0 });
+        }
+
+        // Create gift + ledger entry. If either fails we refund the cubes.
+        try {
+          const [gift] = await db.insert(drinkGifts).values({
+            senderId: req.userId,
+            recipientId,
+            matchId: safeMatchId,
+            drinkName: drinkKey,
+            note: note || null,
+            venueId: safeVenueId,
+            cubesCost: drink.cubes,
+            qrCode,
+            expiresAt,
+          }).returning();
+
+          await db.insert(cubeTransactions).values({
+            userId: req.userId,
+            kind: "spend",
+            amount: drink.cubes,
+            meta: { reason: "drink_gift", giftId: gift.id, recipientId, drink: drinkKey },
+          });
+
+          res.json({
+            success: true,
+            gift: { ...gift, localPaise: drink.localPaise },
+          });
+        } catch (innerErr: any) {
+          // Refund on failure to keep wallet consistent.
+          await db.update(cubeWallets)
+            .set({
+              balance: sql`balance + ${drink.cubes}`,
+              totalSpent: sql`total_spent - ${drink.cubes}`,
+            })
+            .where(eq(cubeWallets.userId, req.userId));
+          throw innerErr;
+        }
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
-    
+
+    // Gifts received by the current user (pending vouchers).
+    app.get("/api/gifts/received", authMiddleware, async (req: any, res) => {
+      try {
+        const rows = await db
+          .select({
+            id: drinkGifts.id,
+            drinkName: drinkGifts.drinkName,
+            note: drinkGifts.note,
+            cubesCost: drinkGifts.cubesCost,
+            qrCode: drinkGifts.qrCode,
+            accepted: drinkGifts.accepted,
+            redeemedAt: drinkGifts.redeemedAt,
+            expiresAt: drinkGifts.expiresAt,
+            createdAt: drinkGifts.createdAt,
+            senderId: drinkGifts.senderId,
+            senderName: users.name,
+            senderPhotos: users.photos,
+          })
+          .from(drinkGifts)
+          .innerJoin(users, eq(users.id, drinkGifts.senderId))
+          .where(eq(drinkGifts.recipientId, req.userId))
+          .orderBy(desc(drinkGifts.createdAt))
+          .limit(50);
+        res.json(rows);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Gifts sent by the current user.
+    app.get("/api/gifts/sent", authMiddleware, async (req: any, res) => {
+      try {
+        const rows = await db
+          .select({
+            id: drinkGifts.id,
+            drinkName: drinkGifts.drinkName,
+            note: drinkGifts.note,
+            cubesCost: drinkGifts.cubesCost,
+            qrCode: drinkGifts.qrCode,
+            accepted: drinkGifts.accepted,
+            redeemedAt: drinkGifts.redeemedAt,
+            expiresAt: drinkGifts.expiresAt,
+            createdAt: drinkGifts.createdAt,
+            recipientId: drinkGifts.recipientId,
+            recipientName: users.name,
+            recipientPhotos: users.photos,
+          })
+          .from(drinkGifts)
+          .innerJoin(users, eq(users.id, drinkGifts.recipientId))
+          .where(eq(drinkGifts.senderId, req.userId))
+          .orderBy(desc(drinkGifts.createdAt))
+          .limit(50);
+        res.json(rows);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Accept drink gift
     app.post("/api/gifts/:id/accept", authMiddleware, async (req: any, res) => {
       try {
         const giftId = parseInt(req.params.id);
-        
+        if (Number.isNaN(giftId)) return res.status(400).json({ error: "Invalid id" });
+
         const [gift] = await db.update(drinkGifts)
           .set({ accepted: true })
           .where(and(
@@ -1701,8 +1836,43 @@ import type { Express, Request, Response, NextFunction } from "express";
             eq(drinkGifts.recipientId, req.userId)
           ))
           .returning();
-        
+
+        if (!gift) return res.status(404).json({ error: "Gift not found" });
         res.json({ success: true, gift });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Redeem at bar (one-shot). Validates QR + expiry + recipient.
+    app.post("/api/gifts/redeem", authMiddleware, async (req: any, res) => {
+      try {
+        const { qrCode } = req.body || {};
+        if (typeof qrCode !== "string" || !qrCode) {
+          return res.status(400).json({ error: "Missing QR code" });
+        }
+        // Single atomic conditional update — guarantees one-shot redemption
+        // even under concurrent requests.
+        const now = new Date();
+        const [updated] = await db.update(drinkGifts)
+          .set({ redeemedAt: now, accepted: true })
+          .where(and(
+            eq(drinkGifts.qrCode, qrCode),
+            eq(drinkGifts.recipientId, req.userId),
+            isNull(drinkGifts.redeemedAt),
+            or(isNull(drinkGifts.expiresAt), gte(drinkGifts.expiresAt, now)),
+          ))
+          .returning();
+
+        if (!updated) {
+          // Distinguish reasons for clearer client messaging.
+          const [existing] = await db.select().from(drinkGifts).where(eq(drinkGifts.qrCode, qrCode)).limit(1);
+          if (!existing) return res.status(404).json({ error: "Voucher not found" });
+          if (existing.recipientId !== req.userId) return res.status(403).json({ error: "Not your voucher" });
+          if (existing.redeemedAt) return res.status(409).json({ error: "Already redeemed", redeemedAt: existing.redeemedAt });
+          return res.status(410).json({ error: "Voucher expired" });
+        }
+        res.json({ success: true, gift: updated });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
