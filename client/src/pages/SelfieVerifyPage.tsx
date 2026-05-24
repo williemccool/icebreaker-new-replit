@@ -240,14 +240,6 @@ export default function SelfieVerifyPage({ onDone }: { onDone: () => void }) {
         >
           Verify My Selfie Now <ArrowRight className="w-4 h-4" />
         </button>
-        <button
-          onClick={onDone}
-          className="text-icebreaker-muted text-sm font-semibold py-2"
-          data-testid="button-maybe-later"
-        >
-          Maybe Later
-        </button>
-
         <div className="flex items-center gap-1.5 mt-4">
           <Lock className="w-3 h-3 text-icebreaker-muted" />
           <span className="text-[10px] text-icebreaker-muted font-bold tracking-widest">

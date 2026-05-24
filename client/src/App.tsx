@@ -29,6 +29,7 @@ import SettingsPage from "./pages/SettingsPage";
 import MutualMatchPage from "./pages/MutualMatchPage";
 import IcebreakerGamePage from "./pages/IcebreakerGamePage";
 import GiftDrinkPage from "./pages/GiftDrinkPage";
+import PlanDatePage from "./pages/PlanDatePage";
 import PaymentPage from "./pages/PaymentPage";
 import ConfirmPurchasePage from "./pages/ConfirmPurchasePage";
 import TrustSafetyPage from "./pages/TrustSafetyPage";
@@ -40,7 +41,7 @@ import NotFoundPage from "./pages/not-found";
 
 const HIDE_NAV_ROUTES = [
   "/auth", "/onboarding", "/tutorial",
-  "/match/", "/game/", "/gift/", "/payment", "/safety", "/shop", "/settings",
+  "/match/", "/game/", "/gift/", "/dates/", "/payment", "/safety", "/shop", "/settings",
   "/rooms/", // hide on /rooms/:id and /rooms/:id/entry — list page /rooms stays visible
 ];
 
@@ -190,6 +191,7 @@ function App() {
           <Route path="/match/:matchId" component={MutualMatchPage} />
           <Route path="/game/:matchId" component={IcebreakerGamePage} />
           <Route path="/gift/:userId" component={GiftDrinkPage} />
+          <Route path="/dates/plan/:matchId" component={PlanDatePage} />
           <Route path="/payment" component={PaymentPage} />
           <Route path="/payment/confirm" component={ConfirmPurchasePage} />
           <Route path="/safety" component={TrustSafetyPage} />

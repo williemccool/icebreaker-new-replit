@@ -25,7 +25,7 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
         body: JSON.stringify({ phone })
       });
       if (res.ok) {
-        let data: { devOtp?: string } = {};
+        let data: { devOtp?: string; demo?: boolean } = {};
         try {
           data = await res.json();
         } catch (err) {
@@ -34,10 +34,16 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
           return;
         }
         setStep("otp");
-        if (data?.devOtp) {
-          setDevOtp(data.devOtp);
-          setOtp(data.devOtp);
-          toast({ title: `Dev OTP: ${data.devOtp}`, description: "Auto-filled for development" });
+        // Demo phone: backend short-circuits and accepts the literal 123456.
+        const demoCode = data?.demo ? "123456" : null;
+        const auto = data?.devOtp || demoCode;
+        if (auto) {
+          setDevOtp(auto);
+          setOtp(auto);
+          toast({
+            title: demoCode ? `Demo OTP: ${auto}` : `Dev OTP: ${auto}`,
+            description: "Auto-filled — tap Verify",
+          });
         } else {
           setDevOtp(null);
           toast({ title: "OTP sent!" });

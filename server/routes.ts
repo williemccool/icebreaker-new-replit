@@ -1692,7 +1692,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         let safeMatchId: number | undefined = matchId;
         if (matchId) {
           const [m] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
-          if (!m || (m.user1Id !== req.userId && m.user2Id !== req.userId)) {
+          if (!m || (m.userAId !== req.userId && m.userBId !== req.userId)) {
             safeMatchId = undefined;
           }
         }
@@ -1880,48 +1880,147 @@ import type { Express, Request, Response, NextFunction } from "express";
 
     // ============ DATE BOOKING ROUTES ============
     
-    // Propose date
+    const proposeDateSchema = z.object({
+      matchId: z.number().int().positive(),
+      venueId: z.number().int().positive(),
+      bookingDate: z.string().min(1),
+      location: z.string().max(200).optional(),
+      safetyCheck: z.boolean().optional(),
+    });
+
+    // Propose a date — validates that the proposer is in the match
+    // and that venue exists, then upserts a single active booking per match.
     app.post("/api/dates/propose", authMiddleware, async (req: any, res) => {
       try {
-        const { matchId, venueId, bookingDate, location } = req.body;
-        
+        const parsed = proposeDateSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid date payload", details: parsed.error.flatten() });
+        }
+        const { matchId, venueId, bookingDate, location } = parsed.data;
+
+        const when = new Date(bookingDate);
+        if (Number.isNaN(when.getTime()) || when.getTime() < Date.now() - 60_000) {
+          return res.status(400).json({ error: "Date must be in the future" });
+        }
+
+        const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+        if (!match) return res.status(404).json({ error: "Match not found" });
+        if (match.userAId !== req.userId && match.userBId !== req.userId) {
+          return res.status(403).json({ error: "Not your match" });
+        }
+
+        const [venue] = await db.select().from(venues).where(eq(venues.id, venueId)).limit(1);
+        if (!venue) return res.status(404).json({ error: "Venue not found" });
+
         const qrCode = nanoid(16);
-        
         const [booking] = await db.insert(dateBookings).values({
           matchId,
           venueId,
           proposedBy: req.userId,
-          bookingDate: new Date(bookingDate),
-          location,
-          qrCode
+          bookingDate: when,
+          location: location ?? venue.name,
+          qrCode,
         }).returning();
-        
+
         res.json({ success: true, booking });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
-    
-    // Confirm date
+
+    // List bookings for a given match (only members can see).
+    app.get("/api/dates/match/:matchId", authMiddleware, async (req: any, res) => {
+      try {
+        const matchId = parseInt(req.params.matchId);
+        if (Number.isNaN(matchId)) return res.status(400).json({ error: "Invalid match id" });
+
+        const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+        if (!match) return res.status(404).json({ error: "Match not found" });
+        if (match.userAId !== req.userId && match.userBId !== req.userId) {
+          return res.status(403).json({ error: "Not your match" });
+        }
+
+        const list = await db
+          .select({
+            id: dateBookings.id,
+            matchId: dateBookings.matchId,
+            venueId: dateBookings.venueId,
+            proposedBy: dateBookings.proposedBy,
+            bookingDate: dateBookings.bookingDate,
+            location: dateBookings.location,
+            qrCode: dateBookings.qrCode,
+            confirmed: dateBookings.confirmed,
+            createdAt: dateBookings.createdAt,
+            venueName: venues.name,
+            venueImage: venues.imageUrl,
+            venueArea: venues.area,
+          })
+          .from(dateBookings)
+          .leftJoin(venues, eq(venues.id, dateBookings.venueId))
+          .where(eq(dateBookings.matchId, matchId))
+          .orderBy(desc(dateBookings.createdAt));
+
+        res.json(list);
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Confirm date — only the OTHER side may confirm.
     app.post("/api/dates/:id/confirm", authMiddleware, async (req: any, res) => {
       try {
         const bookingId = parseInt(req.params.id);
-        
-        const [booking] = await db.update(dateBookings)
+        if (Number.isNaN(bookingId)) return res.status(400).json({ error: "Invalid id" });
+
+        const [booking] = await db.select().from(dateBookings).where(eq(dateBookings.id, bookingId)).limit(1);
+        if (!booking) return res.status(404).json({ error: "Booking not found" });
+        if (booking.proposedBy === req.userId) {
+          return res.status(403).json({ error: "Only the other side can accept" });
+        }
+        const [match] = await db.select().from(matches).where(eq(matches.id, booking.matchId)).limit(1);
+        if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
+          return res.status(403).json({ error: "Not your match" });
+        }
+        if (booking.confirmed) {
+          return res.json({ success: true, booking, cubesEarned: 0, already: true });
+        }
+
+        const [updated] = await db.update(dateBookings)
           .set({ confirmed: true })
           .where(eq(dateBookings.id, bookingId))
           .returning();
-        
-        // Award cubes for confirming date
+
+        // Award cubes to BOTH sides — confirmer + proposer.
         const cubesEarned = 20;
         await db.update(cubeWallets)
-          .set({ 
-            balance: sql`balance + ${cubesEarned}`,
-            totalEarned: sql`total_earned + ${cubesEarned}`
-          })
-          .where(eq(cubeWallets.userId, req.userId));
-        
-        res.json({ success: true, booking, cubesEarned });
+          .set({ balance: sql`balance + ${cubesEarned}`, totalEarned: sql`total_earned + ${cubesEarned}` })
+          .where(inArray(cubeWallets.userId, [req.userId, booking.proposedBy]));
+
+        await db.insert(cubeTransactions).values([
+          { userId: req.userId,        kind: "earn", amount: cubesEarned, meta: { reason: "date_confirmed", bookingId } },
+          { userId: booking.proposedBy, kind: "earn", amount: cubesEarned, meta: { reason: "date_confirmed", bookingId } },
+        ]);
+
+        res.json({ success: true, booking: updated, cubesEarned });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Decline date — either side may decline.
+    app.post("/api/dates/:id/decline", authMiddleware, async (req: any, res) => {
+      try {
+        const bookingId = parseInt(req.params.id);
+        if (Number.isNaN(bookingId)) return res.status(400).json({ error: "Invalid id" });
+
+        const [booking] = await db.select().from(dateBookings).where(eq(dateBookings.id, bookingId)).limit(1);
+        if (!booking) return res.status(404).json({ error: "Booking not found" });
+        const [match] = await db.select().from(matches).where(eq(matches.id, booking.matchId)).limit(1);
+        if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
+          return res.status(403).json({ error: "Not your match" });
+        }
+        await db.delete(dateBookings).where(eq(dateBookings.id, bookingId));
+        res.json({ success: true });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
