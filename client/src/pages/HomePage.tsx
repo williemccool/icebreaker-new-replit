@@ -9,46 +9,16 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState("Dating");
   const [, navigate] = useLocation();
 
-  const { data: userData } = useQuery({
-    queryKey: ["/api/user/me"],
-    queryFn: async () => {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/user/me", { headers: { Authorization: `Bearer ${token}` } });
-      return res.json();
-    }
-  });
-
-  const { data: venues } = useQuery({
-    queryKey: ["/api/venues"],
-    queryFn: async () => {
-      const res = await fetch("/api/venues?city=Bangalore");
-      return res.json();
-    }
-  });
-
-  const { data: rooms } = useQuery({
-    queryKey: ["/api/rooms"],
-    queryFn: async () => {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/rooms", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      return res.json();
-    }
-  });
-
-  const { data: events } = useQuery({
-    queryKey: ["/api/events"],
-    queryFn: async () => {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/events", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      return res.json();
-    }
-  });
+  const { data: userData } = useQuery<any>({ queryKey: ["/api/user/me"] });
+  const { data: venues } = useQuery<any>({ queryKey: ["/api/venues"] });
+  const { data: rooms } = useQuery<any>({ queryKey: ["/api/rooms"] });
+  const { data: events } = useQuery<any>({ queryKey: ["/api/events"] });
 
   const user = userData?.user;
   const wallet = userData?.wallet;
-  const hotVenues = (venues || []).slice(0, 4);
-  const liveRooms = (rooms || []).slice(0, 2);
-  const nextEvent = (events || [])[0];
+  const hotVenues = Array.isArray(venues) ? venues.slice(0, 4) : [];
+  const liveRooms = Array.isArray(rooms) ? rooms.slice(0, 2) : [];
+  const nextEvent = Array.isArray(events) ? events[0] : undefined;
 
   return (
     <div className="min-h-screen pb-24" style={{ background: "#0A0A0C" }}>

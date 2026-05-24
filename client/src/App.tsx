@@ -32,6 +32,10 @@ import GiftDrinkPage from "./pages/GiftDrinkPage";
 import PaymentPage from "./pages/PaymentPage";
 import ConfirmPurchasePage from "./pages/ConfirmPurchasePage";
 import TrustSafetyPage from "./pages/TrustSafetyPage";
+import TermsPage from "./pages/TermsPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import CommunityGuidelinesPage from "./pages/CommunityGuidelinesPage";
+import GrievancePage from "./pages/GrievancePage";
 import NotFoundPage from "./pages/not-found";
 
 const HIDE_NAV_ROUTES = [
@@ -121,6 +125,21 @@ function App() {
   }
 
   if (!isAuthenticated) {
+    // Allow legal pages to be visited pre-auth so the T&C links on the login screen work.
+    const path = typeof window !== "undefined" ? window.location.pathname : "/";
+    if (path === "/terms" || path === "/privacy" || path === "/community-guidelines" || path === "/grievance") {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <Switch>
+            <Route path="/terms" component={TermsPage} />
+            <Route path="/privacy" component={PrivacyPage} />
+            <Route path="/community-guidelines" component={CommunityGuidelinesPage} />
+            <Route path="/grievance" component={GrievancePage} />
+          </Switch>
+          <Toaster />
+        </QueryClientProvider>
+      );
+    }
     return (
       <QueryClientProvider client={queryClient}>
         {!seenIntro ? (
@@ -174,6 +193,10 @@ function App() {
           <Route path="/payment" component={PaymentPage} />
           <Route path="/payment/confirm" component={ConfirmPurchasePage} />
           <Route path="/safety" component={TrustSafetyPage} />
+          <Route path="/terms" component={TermsPage} />
+          <Route path="/privacy" component={PrivacyPage} />
+          <Route path="/community-guidelines" component={CommunityGuidelinesPage} />
+          <Route path="/grievance" component={GrievancePage} />
           <Route component={NotFoundPage} />
         </Switch>
         <BottomNav />

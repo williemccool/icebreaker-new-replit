@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Smartphone, User, GlassWater } from "lucide-react";
@@ -164,6 +165,12 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
             <p className="text-center text-xs text-icebreaker-muted pt-1">
               Already have an account?{" "}
               <span className="text-white font-semibold cursor-pointer underline underline-offset-2" onClick={() => setStep("phone")}>Log in</span>
+            </p>
+            <p className="text-center text-[11px] text-icebreaker-muted/80 leading-relaxed pt-2">
+              By continuing you confirm you're 18+ and agree to our{" "}
+              <Link href="/terms"><span className="text-icebreaker-coral underline">Terms</span></Link>,{" "}
+              <Link href="/privacy"><span className="text-icebreaker-coral underline">Privacy</span></Link>, and{" "}
+              <Link href="/community-guidelines"><span className="text-icebreaker-coral underline">Community Guidelines</span></Link>.
             </p>
           </>
         )}

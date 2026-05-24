@@ -1,9 +1,10 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { useState } from "react";
-import { X, Heart, Gift, ArrowLeft, Clock, Users, BadgeCheck } from "lucide-react";
+import { X, Heart, Gift, ArrowLeft, Clock, Users, BadgeCheck, MessageCircle, Flag, Ban } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import RoomChatPanel from "@/components/RoomChatPanel";
 
 const AVATARS = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80",
@@ -36,21 +37,37 @@ export default function RoomDiscoveryPage() {
   const [index, setIndex] = useState(0);
   const [leaving, setLeaving] = useState<"left" | "right" | null>(null);
   const [gifted, setGifted] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
-    queryKey: [`/api/rooms/${id}`],
-    queryFn: async () => {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`/api/rooms/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return res.json();
-    }
-  });
+  const { data, isLoading } = useQuery<any>({ queryKey: ["/api/rooms", id] });
+  const { data: meData } = useQuery<any>({ queryKey: ["/api/user/me"] });
+  const meId = meData?.user?.id as number | undefined;
+  const roomIdNum = id ? parseInt(id) : NaN;
 
   const swipeMutation = useMutation({
     mutationFn: ({ swipedId, liked }: { swipedId: number; liked: boolean }) =>
       apiRequest("POST", "/api/swipe", { swipedId, liked }),
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: (reportedUserId: number) =>
+      apiRequest("POST", "/api/reports", {
+        reportedUserId,
+        contentType: "user",
+        reason: "Reported from live room",
+      }),
+    onSuccess: () => toast({ title: "Reported", description: "Thanks — our team will review within 24h." }),
+  });
+  const blockMutation = useMutation({
+    mutationFn: (blockedId: number) => apiRequest("POST", "/api/blocks", { blockedId }),
+    onSuccess: () => {
+      toast({ title: "Blocked", description: "You won't see them again." });
+      qc.invalidateQueries({ queryKey: ["/api/rooms", id] });
+      qc.invalidateQueries({ queryKey: ["/api/matches"] });
+      setIndex((i) => i + 1);
+    },
   });
 
   const profiles = (data?.participants || []).map((u: any, i: number) => ({
@@ -126,11 +143,53 @@ export default function RoomDiscoveryPage() {
           <span className="text-xs text-icebreaker-muted font-semibold">{minsLeft}m left</span>
         </div>
 
+        <button
+          onClick={() => setChatOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl relative"
+          style={{ background: "rgba(255,27,141,0.12)", border: "1px solid rgba(255,27,141,0.35)" }}
+          data-testid="button-open-room-chat"
+        >
+          <MessageCircle className="w-3.5 h-3.5 text-icebreaker-coral" />
+          <span className="text-xs font-bold text-icebreaker-coral">Chat</span>
+          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-icebreaker-coral animate-pulse" />
+        </button>
+
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl" style={{ background: "rgba(0,207,255,0.08)", border: "1px solid rgba(0,207,255,0.2)" }}>
           <Users className="w-3.5 h-3.5 text-icebreaker-teal" />
           <span className="text-xs font-bold text-icebreaker-teal">{profiles.length}</span>
         </div>
       </div>
+
+      {!Number.isNaN(roomIdNum) && (
+        <RoomChatPanel roomId={roomIdNum} meId={meId} open={chatOpen} onClose={() => setChatOpen(false)} />
+      )}
+
+      {actionsOpen && current?.id && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.6)" }} onClick={() => setActionsOpen(false)}>
+          <div className="w-full max-w-sm rounded-t-3xl p-5 space-y-3" style={{ background: "#0F0F14", border: "1px solid rgba(255,255,255,0.08)" }} onClick={(e) => e.stopPropagation()}>
+            <p className="font-extrabold text-base mb-1">{current.name || "User"}</p>
+            <button
+              onClick={() => { reportMutation.mutate(current.id); setActionsOpen(false); }}
+              className="w-full flex items-center gap-3 p-3 rounded-2xl text-left"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+              data-testid="button-report-user"
+            >
+              <Flag className="w-4 h-4 text-yellow-400" />
+              <span className="font-bold text-sm">Report this user</span>
+            </button>
+            <button
+              onClick={() => { blockMutation.mutate(current.id); setActionsOpen(false); }}
+              className="w-full flex items-center gap-3 p-3 rounded-2xl text-left"
+              style={{ background: "rgba(255,80,80,0.08)", border: "1px solid rgba(255,80,80,0.25)" }}
+              data-testid="button-block-user"
+            >
+              <Ban className="w-4 h-4" style={{ color: "#FF5050" }} />
+              <span className="font-bold text-sm">Block this user</span>
+            </button>
+            <button onClick={() => setActionsOpen(false)} className="w-full p-3 text-sm text-icebreaker-muted">Cancel</button>
+          </div>
+        </div>
+      )}
 
       {/* Main card area */}
       <div className="flex-1 flex flex-col items-center justify-center px-4 pb-4">
@@ -193,6 +252,14 @@ export default function RoomDiscoveryPage() {
                       </div>
                     )}
                   </div>
+                  <button
+                    onClick={() => setActionsOpen(true)}
+                    className="w-9 h-9 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.15)" }}
+                    data-testid="button-card-actions"
+                  >
+                    <span className="text-white text-lg leading-none">⋯</span>
+                  </button>
                 </div>
               </div>
             </div>

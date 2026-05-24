@@ -47,30 +47,101 @@ export default function PaymentPage() {
   const isSub = item.category === "godmode";
   const Icon = item.category === "cubes" ? Sparkles : item.category === "godmode" ? Crown : Trophy;
 
+  const loadRazorpayScript = (): Promise<boolean> =>
+    new Promise((resolve) => {
+      if ((window as any).Razorpay) return resolve(true);
+      const s = document.createElement("script");
+      s.src = "https://checkout.razorpay.com/v1/checkout.js";
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.body.appendChild(s);
+    });
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ["/api/wallet"] });
+    qc.invalidateQueries({ queryKey: ["/api/me/subscription"] });
+    qc.invalidateQueries({ queryKey: ["/api/cubes/transactions"] });
+    qc.invalidateQueries({ queryKey: ["/api/user/me"] });
+  };
+
+  const runSimulatedPurchase = async () => {
+    const token = localStorage.getItem("token");
+    const res = await fetch("/api/purchase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ sku }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || "Purchase failed");
+    return res.json();
+  };
+
   const handleContinue = async () => {
     setLoading(true);
     try {
-      await new Promise(r => setTimeout(r, 900));
       const token = localStorage.getItem("token");
-      const res = await fetch("/api/purchase", {
+      // Try Razorpay flow first
+      const orderRes = await fetch("/api/payments/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ sku }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Purchase failed");
-      const data = await res.json();
-      qc.invalidateQueries({ queryKey: ["/api/wallet"] });
-      qc.invalidateQueries({ queryKey: ["/api/me/subscription"] });
-      qc.invalidateQueries({ queryKey: ["/api/cubes/transactions"] });
-      qc.invalidateQueries({ queryKey: ["/api/user/me"] });
-      toast({
-        title: "Payment successful! 🎉",
-        description: data.cubesAdded ? `+${data.cubesAdded} cubes added to your wallet` : `${item.name} is now active`,
+
+      if (orderRes.status === 503) {
+        // Razorpay not configured — fall back to simulated purchase (dev / demo).
+        const data = await runSimulatedPurchase();
+        invalidateAll();
+        toast({
+          title: "Demo purchase complete 🎉",
+          description: data.cubesAdded ? `+${data.cubesAdded} cubes` : `${item.name} is now active`,
+        });
+        navigate("/rewards");
+        return;
+      }
+
+      if (!orderRes.ok) throw new Error((await orderRes.json()).error || "Order failed");
+      const order = await orderRes.json();
+
+      const ok = await loadRazorpayScript();
+      if (!ok) throw new Error("Could not load Razorpay. Check your connection.");
+
+      const userJson = localStorage.getItem("user");
+      const user = userJson ? JSON.parse(userJson) : {};
+
+      const rzp = new (window as any).Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.orderId,
+        name: "Icebreaker",
+        description: item.name,
+        prefill: { name: user?.name || "", contact: user?.phone || "" },
+        theme: { color: "#FF1B8D" },
+        handler: async (resp: any) => {
+          try {
+            const verify = await fetch("/api/payments/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify(resp),
+            });
+            if (!verify.ok) throw new Error((await verify.json()).error || "Verification failed");
+            invalidateAll();
+            toast({ title: "Payment successful! 🎉", description: `${item.name} is now active.` });
+            navigate("/rewards");
+          } catch (e: any) {
+            toast({ title: "Verification failed", description: e.message, variant: "destructive" });
+          }
+        },
+        modal: {
+          ondismiss: () => setLoading(false),
+        },
       });
-      navigate("/rewards");
+      rzp.on("payment.failed", (r: any) => {
+        toast({ title: "Payment failed", description: r?.error?.description || "Please try again.", variant: "destructive" });
+        setLoading(false);
+      });
+      rzp.open();
     } catch (e: any) {
       toast({ title: "Payment failed", description: e.message, variant: "destructive" });
-    } finally {
       setLoading(false);
     }
   };
