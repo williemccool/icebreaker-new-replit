@@ -11,7 +11,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     insertReportSchema, insertBlockSchema
   } from "@shared/schema";
   import { getPackById, pickOtherTone, renderRoundPath, validateIcebreakerRound } from "@shared/icebreakerPacks";
-  import { eq, and, or, desc, sql, gte, lte, isNull, ne, notInArray, inArray } from "drizzle-orm";
+  import { eq, and, or, desc, sql, gte, lte, lt, isNull, ne, notInArray, inArray } from "drizzle-orm";
   import bcrypt from "bcryptjs";
   import jwt from "jsonwebtoken";
   import { nanoid } from "nanoid";
@@ -160,7 +160,65 @@ import type { Express, Request, Response, NextFunction } from "express";
     }
   }
 
+  // Keep Live Rooms actually live. Looks for active rooms with ends_at in the
+  // past and rolls them forward to today's nightlife window (5pm → 2am next day).
+  // If no rooms exist at all, seeds five defaults across the seed venues.
+  async function ensureLiveRooms() {
+    try {
+      const now = new Date();
+      const startsAt = new Date(now);
+      startsAt.setHours(17, 0, 0, 0);
+      const endsAt = new Date(startsAt);
+      endsAt.setDate(endsAt.getDate() + 1);
+      endsAt.setHours(2, 0, 0, 0);
+
+      const all = await db.select().from(rooms);
+      if (all.length === 0) {
+        const venueList = await db.select().from(venues).limit(5);
+        const defaults = [
+          { name: "Friday Vibes 🍺" },
+          { name: "Pre-Game Mixer 🎶" },
+          { name: "Rooftop Sunset 🌇" },
+          { name: "Late Night Lounge 🥂" },
+          { name: "Warm-up Session 🎧" },
+        ];
+        for (let i = 0; i < defaults.length; i++) {
+          const venue = venueList[i % Math.max(venueList.length, 1)];
+          if (!venue) break;
+          await db.insert(rooms).values({
+            venueId: venue.id,
+            name: `${defaults[i].name} @ ${venue.name}`,
+            capacity: 12,
+            startsAt,
+            endsAt,
+            virtual: true,
+            premium: false,
+            active: true,
+          });
+        }
+        console.log(`[rooms] Seeded ${defaults.length} live rooms.`);
+        return;
+      }
+
+      // Slide expired rooms forward so demos always show live rooms.
+      const expired = all.filter((r) => r.active && r.endsAt && r.endsAt < now);
+      if (expired.length > 0) {
+        await db
+          .update(rooms)
+          .set({ startsAt, endsAt })
+          .where(and(eq(rooms.active, true), lt(rooms.endsAt, now)));
+        console.log(`[rooms] Refreshed ${expired.length} expired rooms.`);
+      }
+    } catch (e) {
+      console.error("[rooms] ensureLiveRooms failed:", e);
+    }
+  }
+
   export function registerRoutes(app: Express): Server {
+    // Kick off the live-rooms guard on boot, then re-check every 15 min.
+    ensureLiveRooms();
+    setInterval(ensureLiveRooms, 15 * 60 * 1000);
+
     const httpServer = createServer(app);
     const io = new SocketServer(httpServer, {
       cors: {
