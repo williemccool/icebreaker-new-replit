@@ -60,22 +60,21 @@ export default function InVenueUserSheet({ userId, venueName, onClose }: Props) 
         data-testid="sheet-backdrop"
       />
 
-      {/* Sheet */}
+      {/* Sheet — capped to viewport height with internal scroll + sticky footer */}
       <div
-        className="relative w-full max-w-lg rounded-t-3xl px-5 pt-3 pb-7"
+        className="relative w-full max-w-lg rounded-t-3xl flex flex-col"
         style={{
           background: "linear-gradient(180deg, #15101A 0%, #0A0A0C 100%)",
           border: "1px solid rgba(255,27,141,0.25)",
           boxShadow: "0 -20px 60px rgba(255,27,141,0.15)",
+          maxHeight: "92vh",
         }}
       >
-        {/* Grabber + close */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex-1 flex justify-center">
-            <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
-          </div>
+        {/* Grabber */}
+        <div className="flex items-center justify-center pt-3 pb-1 flex-shrink-0">
+          <div className="w-10 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.25)" }} />
         </div>
-        <div className="flex items-center justify-between mb-2">
+        <div className="px-5 flex items-center justify-between mb-2 flex-shrink-0">
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
             style={{ background: "rgba(0,255,128,0.12)", border: "1px solid rgba(0,255,128,0.35)" }}
@@ -101,7 +100,8 @@ export default function InVenueUserSheet({ userId, venueName, onClose }: Props) 
           </div>
         ) : (
           <>
-            {/* Avatar */}
+            {/* Scrollable profile body */}
+            <div className="flex-1 overflow-y-auto px-5">
             <div className="flex flex-col items-center pt-1 pb-4">
               <div className="relative mb-3">
                 {user.photos?.[0] ? (
@@ -152,9 +152,16 @@ export default function InVenueUserSheet({ userId, venueName, onClose }: Props) 
                 </div>
               )}
             </div>
+            </div>
 
-            {/* Action buttons — Like + Gift only */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Sticky footer with action buttons */}
+            <div
+              className="flex-shrink-0 px-5 pt-3 pb-6 grid grid-cols-2 gap-3"
+              style={{
+                background: "linear-gradient(to top, #0A0A0C 70%, transparent)",
+                paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
+              }}
+            >
               <button
                 onClick={() => sendLike.mutate()}
                 disabled={sendLike.isPending}
