@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, MapPin, Star, Zap, Users, Calendar, ChevronRight, Clock, GlassWater, Badge, Radio, Eye } from "lucide-react";
+import InVenueUserSheet from "@/components/InVenueUserSheet";
 
 export default function VenueDetailPage() {
   const params = useParams<{ id: string }>();
@@ -13,6 +14,7 @@ export default function VenueDetailPage() {
   const [checkingIn, setCheckingIn] = useState(false);
   const [presenceTab, setPresenceTab] = useState<"venue" | "live">("venue");
   const [visible, setVisible] = useState(true);
+  const [sheetUserId, setSheetUserId] = useState<number | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: [`/api/venues/${venueId}`],
@@ -182,21 +184,24 @@ export default function VenueDetailPage() {
                   const photos = (user.photos as string[]) || [];
                   const hasPhoto = photos.length > 0;
                   return (
-                    <Link key={user.id} href={`/gift/${user.id}`}>
-                      <div className="flex flex-col items-center gap-1.5 cursor-pointer" data-testid={`checked-in-user-${user.id}`}>
-                        <div className="relative">
-                          {hasPhoto ? (
-                            <img src={photos[0]} alt={user.name || ""} className="w-14 h-14 rounded-full object-cover" style={{ border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }} />
-                          ) : (
-                            <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg text-white" style={{ background: i === 0 ? "linear-gradient(135deg, #FF1B8D, #d6007a)" : "linear-gradient(135deg, #00CFFF, #009ecf)", border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }}>
-                              {user.name?.[0] || "U"}
-                            </div>
-                          )}
-                          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-400 border-2 border-icebreaker-bg" />
-                        </div>
-                        <span className="text-[10px] font-semibold truncate w-full text-center">{user.name?.split(" ")[0]}</span>
+                    <button
+                      key={user.id}
+                      onClick={() => setSheetUserId(user.id)}
+                      className="flex flex-col items-center gap-1.5 cursor-pointer focus:outline-none"
+                      data-testid={`checked-in-user-${user.id}`}
+                    >
+                      <div className="relative">
+                        {hasPhoto ? (
+                          <img src={photos[0]} alt={user.name || ""} className="w-14 h-14 rounded-full object-cover" style={{ border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }} />
+                        ) : (
+                          <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg text-white" style={{ background: i === 0 ? "linear-gradient(135deg, #FF1B8D, #d6007a)" : "linear-gradient(135deg, #00CFFF, #009ecf)", border: i === 0 ? "2px solid rgba(255,27,141,0.6)" : "2px solid rgba(0,207,255,0.3)" }}>
+                            {user.name?.[0] || "U"}
+                          </div>
+                        )}
+                        <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-green-400 border-2 border-icebreaker-bg" />
                       </div>
-                    </Link>
+                      <span className="text-[10px] font-semibold truncate w-full text-center">{user.name?.split(" ")[0]}</span>
+                    </button>
                   );
                 })}
               </div>
@@ -313,6 +318,12 @@ export default function VenueDetailPage() {
             </div>
           )}
         </div>
+
+        <InVenueUserSheet
+          userId={sheetUserId}
+          venueName={venue?.name}
+          onClose={() => setSheetUserId(null)}
+        />
       </div>
     );
   }
