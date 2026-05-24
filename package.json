@@ -12,6 +12,8 @@
     "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.13",
+    "@clerk/clerk-react": "^5.61.7",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",
