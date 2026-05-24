@@ -267,6 +267,27 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
     createdAt: timestamp("created_at").defaultNow()
   });
 
+  // Blocks table — one-way user blocks
+  export const blocks = pgTable("blocks", {
+    id: serial("id").primaryKey(),
+    blockerId: integer("blocker_id").references(() => users.id).notNull(),
+    blockedId: integer("blocked_id").references(() => users.id).notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  });
+
+  // Payment orders table — Razorpay order tracking
+  export const paymentOrders = pgTable("payment_orders", {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").references(() => users.id).notNull(),
+    sku: varchar("sku", { length: 100 }).notNull(),
+    amountInr: integer("amount_inr").notNull(),
+    razorpayOrderId: varchar("razorpay_order_id", { length: 100 }).unique(),
+    razorpayPaymentId: varchar("razorpay_payment_id", { length: 100 }),
+    status: varchar("status", { length: 30 }).default('created').notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    completedAt: timestamp("completed_at"),
+  });
+
   // Date bookings table
   export const dateBookings = pgTable("date_bookings", {
     id: serial("id").primaryKey(),
@@ -363,4 +384,6 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
   export const insertCrewSchema = createInsertSchema(crews);
   export const insertOtpSchema = createInsertSchema(otpVerifications);
   export const insertBadgeSchema = createInsertSchema(badges);
+  export const insertBlockSchema = createInsertSchema(blocks);
+  export const insertPaymentOrderSchema = createInsertSchema(paymentOrders);
   

@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
   import { createServer, type Server } from "http";
   import { Server as SocketServer } from "socket.io";
   import { db } from "../db";
@@ -6,16 +6,142 @@ import type { Express } from "express";
     users, otpVerifications, preferences, swipes, matches, messages,
     venues, checkIns, rooms, roomPresence, events, tickets,
     cubeWallets, cubeTransactions, quests, questProgress, seasons,
-    leaderboards, subscriptions, drinkGifts, dateBookings, crews, crewMembers, badges, userBadges
+    leaderboards, subscriptions, drinkGifts, dateBookings, crews, crewMembers, badges, userBadges,
+    reports, blocks, paymentOrders,
+    insertReportSchema, insertBlockSchema
   } from "@shared/schema";
   import { getPackById, pickOtherTone, renderRoundPath, validateIcebreakerRound } from "@shared/icebreakerPacks";
-  import { eq, and, or, desc, sql, gte, lte, isNull } from "drizzle-orm";
+  import { eq, and, or, desc, sql, gte, lte, isNull, ne, notInArray, inArray } from "drizzle-orm";
   import bcrypt from "bcryptjs";
   import jwt from "jsonwebtoken";
   import { nanoid } from "nanoid";
   import crypto from "crypto";
+  import path from "path";
+  import fs from "fs";
+  import multer from "multer";
+  import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+  import { z } from "zod";
 
-  const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
+  // ============ DEMO CONSTANTS ============
+  // Demo credentials must KEEP working in both dev and prod for client showcases.
+  // This is the ONLY hardcoded credential and it is scoped to a single known phone.
+  export const DEMO_PHONE = "8095411567";
+  export const DEMO_OTP = "123456";
+
+  // ============ JWT SECRET — fail-fast in production ============
+  const IS_PROD = process.env.NODE_ENV === "production";
+  if (IS_PROD && !process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET environment variable must be set in production.");
+  }
+  const JWT_SECRET = process.env.JWT_SECRET || "dev-only-change-me-not-for-production";
+
+  // ============ Razorpay (lazy) ============
+  let razorpayClient: any = null;
+  function getRazorpay(): any | null {
+    if (razorpayClient) return razorpayClient;
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keyId || !keySecret) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Razorpay = require("razorpay");
+      razorpayClient = new Razorpay({ key_id: keyId, key_secret: keySecret });
+      return razorpayClient;
+    } catch {
+      return null;
+    }
+  }
+
+  // ============ Twilio (lazy) ============
+  let twilioClient: any = null;
+  function getTwilio(): any | null {
+    if (twilioClient) return twilioClient;
+    const sid = process.env.TWILIO_ACCOUNT_SID;
+    const token = process.env.TWILIO_AUTH_TOKEN;
+    if (!sid || !token) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const twilio = require("twilio");
+      twilioClient = twilio(sid, token);
+      return twilioClient;
+    } catch {
+      return null;
+    }
+  }
+  async function sendSmsOtp(phone: string, otp: string): Promise<{ sent: boolean; reason?: string }> {
+    const client = getTwilio();
+    const from = process.env.TWILIO_PHONE_NUMBER;
+    if (!client || !from) return { sent: false, reason: "twilio_not_configured" };
+    try {
+      const to = phone.startsWith("+") ? phone : `+91${phone}`;
+      await client.messages.create({
+        to,
+        from,
+        body: `Your Icebreaker code is ${otp}. Expires in 10 minutes. Never share this code.`,
+      });
+      return { sent: true };
+    } catch (e: any) {
+      console.error("[twilio] send failed:", e?.message || e);
+      return { sent: false, reason: e?.message || "twilio_failed" };
+    }
+  }
+
+  // ============ Rate limiters ============
+  const otpSendLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many OTP requests. Wait a minute and try again." },
+    keyGenerator: (req, res) => (req.body?.phone as string) || ipKeyGenerator(req.ip || "0.0.0.0"),
+  });
+  const otpVerifyLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many verification attempts. Wait and try again." },
+    keyGenerator: (req, res) => (req.body?.phone as string) || ipKeyGenerator(req.ip || "0.0.0.0"),
+  });
+  const purchaseLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many purchase attempts. Slow down." },
+  });
+  const reportLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many reports. Please wait." },
+  });
+  const uploadLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many uploads. Slow down." },
+  });
+
+  // ============ Multer (photo uploads) ============
+  const UPLOAD_DIR = path.join(process.cwd(), "uploads");
+  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+      filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase().slice(0, 6) || ".jpg";
+        cb(null, `${nanoid(16)}${ext}`);
+      },
+    }),
+    limits: { fileSize: 8 * 1024 * 1024, files: 6 },
+    fileFilter: (_req, file, cb) => {
+      const ok = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(file.mimetype);
+      cb(ok ? null : new Error("Unsupported image type") as any, ok);
+    },
+  });
 
   // Middleware to verify JWT token
   export function authMiddleware(req: any, res: any, next: any) {
@@ -61,51 +187,104 @@ import type { Express } from "express";
 
     // Socket.IO for real-time features
     const activeUsers = new Map<number, string>();
-    
+
+    // Ephemeral in-memory ring buffer of recent room chat (no DB persistence).
+    // Keeps live rooms feeling fresh without growing the database.
+    type RoomChatMsg = { id: string; roomId: number; userId: number; name: string; body: string; at: number };
+    const roomChatHistory = new Map<number, RoomChatMsg[]>();
+    const ROOM_CHAT_MAX = 50;
+
     io.on("connection", (socket) => {
-      console.log("User connected:", socket.id, "userId:", (socket.data as any)?.userId);
-      
+      const authedUserId: number | undefined = (socket.data as any)?.userId;
+
       socket.on("user:online", (userId: number) => {
-        activeUsers.set(userId, socket.id);
-        socket.join(`user:${userId}`);
+        const uid = typeof userId === "number" && userId === authedUserId ? userId : authedUserId;
+        if (!uid) return;
+        activeUsers.set(uid, socket.id);
+        socket.join(`user:${uid}`);
       });
-      
-      socket.on("room:join", async ({ roomId, userId }) => {
-        socket.join(`room:${roomId}`);
-        
-        // Record room presence
-        await db.insert(roomPresence).values({
-          roomId,
-          userId,
-          joinedAt: new Date()
-        });
-        
-        // Broadcast to room
-        io.to(`room:${roomId}`).emit("room:user_joined", { userId });
-        
-        // Get current room users
-        const presences = await db.select().from(roomPresence)
-          .where(and(
-            eq(roomPresence.roomId, roomId),
-            isNull(roomPresence.leftAt)
-          ));
-        
-        socket.emit("room:current_users", presences);
+
+      socket.on("room:join", async ({ roomId }: { roomId: number }) => {
+        try {
+          if (!authedUserId || typeof roomId !== "number") return;
+          socket.join(`room:${roomId}`);
+
+          // Upsert presence — close any stale row first, then insert fresh
+          await db.update(roomPresence)
+            .set({ leftAt: new Date() })
+            .where(and(eq(roomPresence.roomId, roomId), eq(roomPresence.userId, authedUserId), isNull(roomPresence.leftAt)));
+          await db.insert(roomPresence).values({ roomId, userId: authedUserId, joinedAt: new Date() });
+
+          // Look up user for the activity event
+          const [u] = await db.select({ id: users.id, name: users.name, photos: users.photos })
+            .from(users).where(eq(users.id, authedUserId)).limit(1);
+
+          io.to(`room:${roomId}`).emit("room:user_joined", { userId: authedUserId, name: u?.name, photo: (u?.photos as any)?.[0] || null });
+
+          // Live count update
+          const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
+            .from(roomPresence)
+            .where(and(eq(roomPresence.roomId, roomId), isNull(roomPresence.leftAt)));
+          io.to(`room:${roomId}`).emit("room:count", { roomId, count: Number(count) });
+
+          // Send last messages + presence snapshot back to the joiner
+          const history = roomChatHistory.get(roomId) || [];
+          socket.emit("room:history", { roomId, messages: history });
+        } catch (e) { /* swallow */ }
       });
-      
-      socket.on("room:leave", async ({ roomId, userId }) => {
-        socket.leave(`room:${roomId}`);
-        
-        // Update room presence
-        await db.update(roomPresence)
-          .set({ leftAt: new Date() })
-          .where(and(
-            eq(roomPresence.roomId, roomId),
-            eq(roomPresence.userId, userId),
-            isNull(roomPresence.leftAt)
-          ));
-        
-        io.to(`room:${roomId}`).emit("room:user_left", { userId });
+
+      socket.on("room:leave", async ({ roomId }: { roomId: number }) => {
+        try {
+          if (!authedUserId || typeof roomId !== "number") return;
+          socket.leave(`room:${roomId}`);
+          await db.update(roomPresence)
+            .set({ leftAt: new Date() })
+            .where(and(eq(roomPresence.roomId, roomId), eq(roomPresence.userId, authedUserId), isNull(roomPresence.leftAt)));
+
+          io.to(`room:${roomId}`).emit("room:user_left", { userId: authedUserId });
+          const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
+            .from(roomPresence)
+            .where(and(eq(roomPresence.roomId, roomId), isNull(roomPresence.leftAt)));
+          io.to(`room:${roomId}`).emit("room:count", { roomId, count: Number(count) });
+        } catch { /* swallow */ }
+      });
+
+      // Live room group chat (ephemeral — broadcast only, ring buffer in memory)
+      socket.on("room:message", async ({ roomId, body }: { roomId: number; body: string }) => {
+        try {
+          if (!authedUserId || typeof roomId !== "number") return;
+          const text = typeof body === "string" ? body.trim().slice(0, 500) : "";
+          if (!text) return;
+
+          // Must currently be present in the room
+          const [present] = await db.select().from(roomPresence)
+            .where(and(eq(roomPresence.roomId, roomId), eq(roomPresence.userId, authedUserId), isNull(roomPresence.leftAt)))
+            .limit(1);
+          if (!present) return;
+
+          const [u] = await db.select({ name: users.name, photos: users.photos })
+            .from(users).where(eq(users.id, authedUserId)).limit(1);
+
+          const msg: RoomChatMsg = {
+            id: nanoid(10),
+            roomId,
+            userId: authedUserId,
+            name: u?.name || "Someone",
+            body: text,
+            at: Date.now(),
+          };
+          const hist = roomChatHistory.get(roomId) || [];
+          hist.push(msg);
+          while (hist.length > ROOM_CHAT_MAX) hist.shift();
+          roomChatHistory.set(roomId, hist);
+          io.to(`room:${roomId}`).emit("room:message", { ...msg, photo: (u?.photos as any)?.[0] || null });
+        } catch { /* swallow */ }
+      });
+
+      // Typing indicator in rooms
+      socket.on("room:typing", ({ roomId }: { roomId: number }) => {
+        if (!authedUserId || typeof roomId !== "number") return;
+        socket.to(`room:${roomId}`).emit("room:typing", { userId: authedUserId });
       });
       
       // Authenticated chat send. Sender identity comes from the socket's JWT, not
@@ -150,49 +329,59 @@ import type { Express } from "express";
     // ============ AUTH ROUTES ============
     
     // Send OTP
-    app.post("/api/auth/send-otp", async (req, res) => {
+    const phoneSchema = z.object({ phone: z.string().regex(/^[0-9+]{8,15}$/, "Invalid phone") });
+    app.post("/api/auth/send-otp", otpSendLimiter, async (req, res) => {
       try {
-        const { phone } = req.body;
-        
-        // Generate 6-digit OTP
+        const parsed = phoneSchema.safeParse(req.body || {});
+        if (!parsed.success) return res.status(400).json({ error: "Invalid phone" });
+        const { phone } = parsed.data;
+
+        // Demo phone: do NOT call SMS provider — code is fixed and known to demo audience.
+        if (phone === DEMO_PHONE) {
+          return res.json({ success: true, message: "Demo phone — use code 123456", demo: true });
+        }
+
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-        
-        await db.insert(otpVerifications).values({
-          phone,
-          otp,
-          expiresAt,
-          verified: false
-        });
-        
-        // TODO: Send actual SMS via Twilio
-        console.log(`OTP for ${phone}: ${otp}`);
-        
-        const response: { success: boolean; message: string; devOtp?: string } = {
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+        await db.insert(otpVerifications).values({ phone, otp, expiresAt, verified: false });
+
+        const sms = await sendSmsOtp(phone, otp);
+        const response: { success: boolean; message: string; devOtp?: string; smsSent: boolean } = {
           success: true,
-          message: "OTP sent successfully"
+          message: sms.sent ? "OTP sent via SMS" : "OTP generated (SMS provider not configured)",
+          smsSent: sms.sent,
         };
-        if (process.env.NODE_ENV !== "production") {
+        // Only expose OTP in dev / non-prod where SMS isn't going out.
+        if (!IS_PROD && !sms.sent) {
           response.devOtp = otp;
+          console.log(`[dev otp] ${phone}: ${otp}`);
         }
         res.json(response);
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
-    
+
     // Verify OTP & Register/Login
-    app.post("/api/auth/verify-otp", async (req, res) => {
+    const verifySchema = z.object({
+      phone: z.string().regex(/^[0-9+]{8,15}$/),
+      otp: z.string().regex(/^[0-9]{4,8}$/),
+    });
+    app.post("/api/auth/verify-otp", otpVerifyLimiter, async (req, res) => {
       try {
-        const { phone, otp } = req.body;
-        const isDev = process.env.NODE_ENV !== "production";
+        const parsed = verifySchema.safeParse(req.body || {});
+        if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+        const { phone, otp } = parsed.data;
 
         let verification: typeof otpVerifications.$inferSelect | undefined;
 
-        // Dev master code: 123456 always works in non-production
-        const devBypass = isDev && otp === "123456";
+        // Whitelisted demo bypass: ONLY for the known demo phone, in any environment,
+        // and only when the canonical demo OTP is presented. This is intentional and
+        // documented so client showcases keep working in production.
+        const demoBypass = phone === DEMO_PHONE && otp === DEMO_OTP;
 
-        if (!devBypass) {
+        if (!demoBypass) {
           [verification] = await db.select().from(otpVerifications)
             .where(and(
               eq(otpVerifications.phone, phone),
@@ -202,9 +391,9 @@ import type { Express } from "express";
             ))
             .limit(1);
 
-          // Dev fallback: if no exact match, accept the latest unverified OTP
-          // for this phone (kills race conditions with auto-fill in dev).
-          if (!verification && isDev) {
+          // Dev-only fallback: accept the latest unverified OTP for this phone
+          // to kill race conditions with auto-fill while developing locally.
+          if (!verification && !IS_PROD) {
             [verification] = await db.select().from(otpVerifications)
               .where(and(
                 eq(otpVerifications.phone, phone),
@@ -219,7 +408,6 @@ import type { Express } from "express";
             return res.status(400).json({ error: "Invalid or expired OTP" });
           }
 
-          // Mark as verified
           await db.update(otpVerifications)
             .set({ verified: true })
             .where(eq(otpVerifications.id, verification.id));
@@ -359,13 +547,176 @@ import type { Express } from "express";
       }
     });
 
-    // Simulated purchase — handles cubes / godmode / season pass
-    app.post("/api/purchase", authMiddleware, async (req: any, res) => {
+    // ============ PAYMENTS (Razorpay) ============
+    // Create a Razorpay order for a known SKU. Client opens the Razorpay checkout
+    // with the returned order_id, then calls /api/payments/verify with the
+    // signed response. Entitlement is only granted after signature verification.
+    app.post("/api/payments/create-order", purchaseLimiter, authMiddleware, async (req: any, res) => {
+      try {
+        const { SHOP_CATALOG } = await import("../shared/shop");
+        const sku = String(req.body?.sku || "");
+        const item = (SHOP_CATALOG as any)[sku];
+        if (!item) return res.status(400).json({ error: "Unknown SKU" });
+        const amountInPaise = Number(item.priceInPaise) || 0;
+        if (amountInPaise <= 0) return res.status(400).json({ error: "Invalid amount for SKU" });
+
+        const rp = getRazorpay();
+        if (!rp) {
+          return res.status(503).json({
+            error: "Razorpay not configured",
+            fallback: "use_simulated",
+            message: "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to enable real payments.",
+          });
+        }
+        const order = await rp.orders.create({
+          amount: amountInPaise,
+          currency: "INR",
+          receipt: `rcpt_${nanoid(10)}`,
+          notes: { sku, userId: String(req.userId) },
+        });
+        await db.insert(paymentOrders).values({
+          userId: req.userId,
+          sku,
+          amountInr: Math.round(amountInPaise / 100),
+          razorpayOrderId: order.id,
+          status: "created",
+        });
+        res.json({
+          ok: true,
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          keyId: process.env.RAZORPAY_KEY_ID,
+          sku,
+        });
+      } catch (e: any) {
+        console.error("[razorpay] create order failed:", e?.message || e);
+        res.status(500).json({ error: e?.message || "Order creation failed" });
+      }
+    });
+
+    // Verify a Razorpay payment + grant entitlement atomically.
+    app.post("/api/payments/verify", purchaseLimiter, authMiddleware, async (req: any, res) => {
+      try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+          return res.status(400).json({ error: "Missing payment fields" });
+        }
+        const secret = process.env.RAZORPAY_KEY_SECRET;
+        if (!secret) return res.status(503).json({ error: "Razorpay not configured" });
+
+        const expected = crypto
+          .createHmac("sha256", secret)
+          .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+          .digest("hex");
+        const sigBuf = Buffer.from(razorpay_signature, "utf8");
+        const expBuf = Buffer.from(expected, "utf8");
+        if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+          return res.status(400).json({ error: "Signature verification failed" });
+        }
+
+        const [order] = await db.select().from(paymentOrders)
+          .where(eq(paymentOrders.razorpayOrderId, razorpay_order_id)).limit(1);
+        if (!order) return res.status(404).json({ error: "Order not found" });
+        if (order.userId !== req.userId) return res.status(403).json({ error: "Order does not belong to user" });
+        if (order.status === "paid") return res.json({ ok: true, alreadyGranted: true, sku: order.sku });
+
+        await grantSkuEntitlement(req.userId, order.sku, { razorpayPaymentId: razorpay_payment_id });
+
+        await db.update(paymentOrders)
+          .set({ status: "paid", razorpayPaymentId: razorpay_payment_id, completedAt: new Date() })
+          .where(eq(paymentOrders.id, order.id));
+
+        res.json({ ok: true, sku: order.sku });
+      } catch (e: any) {
+        console.error("[razorpay] verify failed:", e?.message || e);
+        res.status(500).json({ error: e?.message || "Verification failed" });
+      }
+    });
+
+    // Shared entitlement granter — used by both Razorpay verify and demo fallback
+    async function grantSkuEntitlement(userId: number, sku: string, meta: Record<string, any> = {}) {
+      const { SHOP_CATALOG } = await import("../shared/shop");
+      const item = (SHOP_CATALOG as any)[sku];
+      if (!item) throw new Error("Unknown SKU");
+
+      if (item.category === "cubes") {
+        const total = (item.cubes || 0) + (item.bonusCubes || 0);
+        await db.update(cubeWallets)
+          .set({
+            balance: sql`${cubeWallets.balance} + ${total}`,
+            totalEarned: sql`${cubeWallets.totalEarned} + ${total}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(cubeWallets.userId, userId));
+        await db.insert(cubeTransactions).values({
+          userId, kind: "earn", amount: total,
+          meta: { reason: "purchase", sku, ...meta },
+        });
+        return { sku, cubesAdded: total };
+      }
+
+      if (item.category === "godmode") {
+        const days = item.durationDays || 30;
+        const endsAt = await db.transaction(async (tx) => {
+          const [existing] = await tx.select().from(subscriptions)
+            .where(and(
+              eq(subscriptions.userId, userId),
+              eq(subscriptions.status, "active"),
+              gte(subscriptions.endsAt, new Date()),
+            ))
+            .orderBy(desc(subscriptions.endsAt))
+            .limit(1);
+          const startsAt = existing ? new Date(existing.endsAt) : new Date();
+          const newEndsAt = new Date(startsAt.getTime() + days * 24 * 3600 * 1000);
+          await tx.insert(subscriptions).values({
+            userId, plan: sku, startsAt, endsAt: newEndsAt, status: "active",
+          });
+          if (existing) {
+            await tx.execute(sql`UPDATE subscriptions SET status = 'expired' WHERE id = ${existing.id}`);
+          }
+          return newEndsAt;
+        });
+        return { sku, endsAt };
+      }
+
+      if (item.category === "season") {
+        const bonus = 200;
+        await db.update(cubeWallets)
+          .set({
+            balance: sql`${cubeWallets.balance} + ${bonus}`,
+            totalEarned: sql`${cubeWallets.totalEarned} + ${bonus}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(cubeWallets.userId, userId));
+        await db.insert(cubeTransactions).values({
+          userId, kind: "earn", amount: bonus,
+          meta: { reason: "season_pass", sku, ...meta },
+        });
+        return { sku, bonusCubes: bonus };
+      }
+      throw new Error("Unsupported SKU category");
+    }
+
+    // Legacy / fallback purchase endpoint — only allowed for the demo user OR when
+    // Razorpay isn't configured (so dev keeps working). In production with Razorpay
+    // configured, this endpoint refuses non-demo users.
+    app.post("/api/purchase", purchaseLimiter, authMiddleware, async (req: any, res) => {
       try {
         const { SHOP_CATALOG } = await import("../shared/shop");
         const { sku } = req.body || {};
         const item = SHOP_CATALOG[sku];
         if (!item) return res.status(400).json({ error: "Unknown SKU" });
+
+        // Guard: if Razorpay IS configured, this fallback path is only allowed
+        // for the demo phone so client showcases still work. Real users must
+        // pay via /api/payments/create-order + /api/payments/verify.
+        if (getRazorpay()) {
+          const [me] = await db.select({ phone: users.phone }).from(users).where(eq(users.id, req.userId)).limit(1);
+          if (me?.phone !== DEMO_PHONE) {
+            return res.status(402).json({ error: "Payment required. Use /api/payments/create-order." });
+          }
+        }
 
         // CUBES TOP-UP
         if (item.category === "cubes") {
@@ -506,18 +857,39 @@ import type { Express } from "express";
     // Update user profile
     app.put("/api/user/profile", authMiddleware, async (req: any, res) => {
       try {
-        const updates = req.body;
-        
-        // Convert date strings to Date objects for Drizzle
-        if (updates.dob && typeof updates.dob === "string") {
-          updates.dob = new Date(updates.dob);
+        const body = req.body || {};
+        // Whitelist mutable profile fields — prevent privilege escalation via
+        // arbitrary column updates (e.g. verified, phone, role).
+        const ALLOWED = ["name", "dob", "city", "pronouns", "bio", "gender", "photos"] as const;
+        const updates: Record<string, any> = {};
+        for (const k of ALLOWED) {
+          if (body[k] !== undefined) updates[k] = body[k];
         }
-        
+
+        // Enforce 18+ server-side. Reject regardless of client UI.
+        if (updates.dob !== undefined) {
+          const d = typeof updates.dob === "string" ? new Date(updates.dob) : updates.dob;
+          if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+            return res.status(400).json({ error: "Invalid date of birth" });
+          }
+          const now = new Date();
+          let age = now.getFullYear() - d.getFullYear();
+          const m = now.getMonth() - d.getMonth();
+          if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+          if (age < 18) {
+            return res.status(403).json({ error: "You must be 18 or older to use Icebreaker." });
+          }
+          if (age > 120) {
+            return res.status(400).json({ error: "Invalid date of birth" });
+          }
+          updates.dob = d;
+        }
+
         const [updated] = await db.update(users)
           .set({ ...updates, updatedAt: new Date() })
           .where(eq(users.id, req.userId))
           .returning();
-        
+
         res.json(updated);
       } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -581,7 +953,7 @@ import type { Express } from "express";
     // ============ VENUE ROUTES ============
     
     // Get all venues
-    app.get("/api/venues", async (req, res) => {
+    app.get("/api/venues", authMiddleware, async (req, res) => {
       try {
         const { city, type } = req.query;
         
@@ -615,7 +987,7 @@ import type { Express } from "express";
     });
     
     // Get venue by ID
-    app.get("/api/venues/:id", async (req, res) => {
+    app.get("/api/venues/:id", authMiddleware, async (req, res) => {
       try {
         const [venue] = await db.select().from(venues)
           .where(eq(venues.id, parseInt(req.params.id)))
@@ -625,10 +997,22 @@ import type { Express } from "express";
           return res.status(404).json({ error: "Venue not found" });
         }
         
-        // Get people currently checked in
+        // Get people currently checked in — scrub PII (no phone/email/dob)
         const checkedInUsers = await db.select({
-          user: users,
-          checkIn: checkIns
+          user: {
+            id: users.id,
+            name: users.name,
+            city: users.city,
+            bio: users.bio,
+            gender: users.gender,
+            photos: users.photos,
+            verified: users.verified,
+          },
+          checkIn: {
+            id: checkIns.id,
+            checkedInAt: checkIns.checkedInAt,
+            venueId: checkIns.venueId,
+          },
         })
         .from(checkIns)
         .innerJoin(users, eq(checkIns.userId, users.id))
@@ -636,7 +1020,7 @@ import type { Express } from "express";
           eq(checkIns.venueId, venue.id),
           isNull(checkIns.checkedOutAt)
         ));
-        
+
         res.json({ venue, checkedInUsers });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -718,11 +1102,39 @@ import type { Express } from "express";
     
 
     
+    // Helper: get all users this userId has blocked (or been blocked by) so we
+    // never expose them to each other anywhere in the app.
+    async function getBlockedUserIds(userId: number): Promise<number[]> {
+      const rows = await db.select().from(blocks)
+        .where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
+      const set = new Set<number>();
+      for (const r of rows) {
+        if (r.blockerId === userId) set.add(r.blockedId);
+        else set.add(r.blockerId);
+      }
+      return Array.from(set);
+    }
+
     // Swipe on user
-    app.post("/api/swipe", authMiddleware, async (req: any, res) => {
+    const swipeSchema = z.object({
+      swipedId: z.number().int().positive(),
+      liked: z.boolean(),
+    });
+    app.post("/api/swipe", purchaseLimiter, authMiddleware, async (req: any, res) => {
       try {
-        const { swipedId, liked } = req.body;
-        
+        const parsed = swipeSchema.safeParse(req.body || {});
+        if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+        const { swipedId, liked } = parsed.data;
+
+        if (swipedId === req.userId) {
+          return res.status(400).json({ error: "Cannot swipe yourself" });
+        }
+        // Cannot interact with blocked users (either direction)
+        const blockedIds = await getBlockedUserIds(req.userId);
+        if (blockedIds.includes(swipedId)) {
+          return res.status(403).json({ error: "User not available" });
+        }
+
         // Record swipe
         await db.insert(swipes).values({
           swiperId: req.userId,
@@ -842,13 +1254,18 @@ import type { Express } from "express";
     // Get user matches
     app.get("/api/matches", authMiddleware, async (req: any, res) => {
       try {
+        const blockedIds = await getBlockedUserIds(req.userId);
         const userMatches = await db.select().from(matches)
           .where(or(
             eq(matches.userAId, req.userId),
             eq(matches.userBId, req.userId)
           ));
-        
-        const matchesWithUsers = await Promise.all(userMatches.map(async (match) => {
+        const visibleMatches = userMatches.filter((m) => {
+          const otherId = m.userAId === req.userId ? m.userBId : m.userAId;
+          return !blockedIds.includes(otherId);
+        });
+
+        const matchesWithUsers = await Promise.all(visibleMatches.map(async (match) => {
           const otherId = match.userAId === req.userId ? match.userBId : match.userAId;
           const [other] = await db.select({
             id: users.id,
@@ -949,21 +1366,29 @@ import type { Express } from "express";
         const presences = await db.select().from(roomPresence)
           .where(and(eq(roomPresence.roomId, roomId), isNull(roomPresence.leftAt)));
 
-        const participantIds = presences.map(p => p.userId);
-        const participants = participantIds.length > 0
-          ? await db.select().from(users).where(sql`id IN (${sql.raw(participantIds.join(','))})`)
+        const blockedIds = await getBlockedUserIds(req.userId);
+        const visibleIds = presences.map(p => p.userId).filter(id => !blockedIds.includes(id));
+
+        const participants = visibleIds.length > 0
+          ? await db.select({
+              id: users.id,
+              name: users.name,
+              city: users.city,
+              bio: users.bio,
+              gender: users.gender,
+              photos: users.photos,
+              verified: users.verified,
+            }).from(users).where(inArray(users.id, visibleIds))
           : [];
 
-        // Calculate minutes remaining
         const minsLeft = Math.max(0, Math.round((new Date(room.endsAt).getTime() - Date.now()) / 60000));
-
-        res.json({ room, participants, minsLeft });
+        res.json({ room, participants, minsLeft, count: visibleIds.length });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
     });
 
-    app.get("/api/rooms", async (req, res) => {
+    app.get("/api/rooms", authMiddleware, async (req: any, res) => {
       try {
         const { venueId } = req.query;
         
@@ -1314,6 +1739,100 @@ import type { Express } from "express";
         res.json(myCrews.map(c => c.crew));
       } catch (error: any) {
         res.status(500).json({ error: error.message });
+      }
+    });
+
+    // ============ REPORTS & BLOCKS ============
+    const reportBodySchema = z.object({
+      reportedUserId: z.number().int().positive().optional(),
+      contentType: z.enum(["user", "message", "photo", "room"]),
+      contentId: z.string().min(1).max(120).optional(),
+      reason: z.string().min(3).max(500),
+    });
+    app.post("/api/reports", reportLimiter, authMiddleware, async (req: any, res) => {
+      try {
+        const parsed = reportBodySchema.safeParse(req.body || {});
+        if (!parsed.success) return res.status(400).json({ error: "Invalid report payload" });
+        const { reportedUserId, contentType, contentId, reason } = parsed.data;
+        const [row] = await db.insert(reports).values({
+          reporterId: req.userId,
+          reportedUserId: reportedUserId || null,
+          contentType,
+          contentId: contentId || null,
+          reason,
+          status: "pending",
+        }).returning();
+        res.json({ ok: true, report: row });
+      } catch (e: any) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    app.get("/api/blocks", authMiddleware, async (req: any, res) => {
+      try {
+        const rows = await db.select().from(blocks).where(eq(blocks.blockerId, req.userId));
+        res.json(rows);
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+    });
+
+    const blockBodySchema = z.object({ blockedId: z.number().int().positive() });
+    app.post("/api/blocks", authMiddleware, async (req: any, res) => {
+      try {
+        const parsed = blockBodySchema.safeParse(req.body || {});
+        if (!parsed.success) return res.status(400).json({ error: "Invalid block payload" });
+        const { blockedId } = parsed.data;
+        if (blockedId === req.userId) return res.status(400).json({ error: "Cannot block yourself" });
+        const [existing] = await db.select().from(blocks)
+          .where(and(eq(blocks.blockerId, req.userId), eq(blocks.blockedId, blockedId))).limit(1);
+        if (existing) return res.json({ ok: true, block: existing, alreadyBlocked: true });
+        const [row] = await db.insert(blocks).values({ blockerId: req.userId, blockedId }).returning();
+        res.json({ ok: true, block: row });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.delete("/api/blocks/:blockedId", authMiddleware, async (req: any, res) => {
+      try {
+        const blockedId = parseInt(req.params.blockedId);
+        await db.delete(blocks)
+          .where(and(eq(blocks.blockerId, req.userId), eq(blocks.blockedId, blockedId)));
+        res.json({ ok: true });
+      } catch (e: any) { res.status(500).json({ error: e.message }); }
+    });
+
+    // ============ PHOTO UPLOAD ============
+    // Accepts up to 6 images, appends URLs to users.photos, returns the new list.
+    app.post("/api/me/photos", uploadLimiter, authMiddleware, upload.array("photos", 6), async (req: any, res) => {
+      try {
+        const files = (req.files as Express.Multer.File[]) || [];
+        if (!files.length) return res.status(400).json({ error: "No files uploaded" });
+        const urls = files.map(f => `/uploads/${path.basename(f.path)}`);
+        const [me] = await db.select({ photos: users.photos }).from(users).where(eq(users.id, req.userId)).limit(1);
+        const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
+        const merged = [...existing, ...urls].slice(0, 6);
+        await db.update(users).set({ photos: merged, updatedAt: new Date() }).where(eq(users.id, req.userId));
+        res.json({ ok: true, photos: merged, added: urls });
+      } catch (e: any) {
+        console.error("[upload] failed:", e?.message || e);
+        res.status(500).json({ error: e.message || "Upload failed" });
+      }
+    });
+
+    app.delete("/api/me/photos", authMiddleware, async (req: any, res) => {
+      try {
+        const url = String(req.body?.url || "");
+        if (!url) return res.status(400).json({ error: "url required" });
+        const [me] = await db.select({ photos: users.photos }).from(users).where(eq(users.id, req.userId)).limit(1);
+        const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
+        const next = existing.filter(p => p !== url);
+        await db.update(users).set({ photos: next, updatedAt: new Date() }).where(eq(users.id, req.userId));
+        // Best-effort: remove local file if it lives in /uploads
+        if (url.startsWith("/uploads/")) {
+          const localPath = path.join(process.cwd(), url);
+          fs.promises.unlink(localPath).catch(() => {});
+        }
+        res.json({ ok: true, photos: next });
+      } catch (e: any) {
+        res.status(500).json({ error: e.message });
       }
     });
 

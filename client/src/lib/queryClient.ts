@@ -33,12 +33,22 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const token = localStorage.getItem("token");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const url = queryKey.join("/") as string;
+    const res = await fetch(url, {
       credentials: "include",
+      headers,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
+    }
+    if (res.status === 401) {
+      // Token is bad/expired — fall back to empty rather than crash
+      // (callers can show empty states; auth gate will redirect to login).
+      return null as any;
     }
 
     await throwIfResNotOk(res);
