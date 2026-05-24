@@ -513,6 +513,98 @@ import type { Express, Request, Response, NextFunction } from "express";
       }
     });
 
+    // ============ Clerk Exchange ============
+    // Takes a Clerk session token (from useAuth().getToken() on the client),
+    // verifies it server-side, then finds-or-creates a user keyed by clerkUserId
+    // (or email fallback) and issues our existing JWT.
+    const clerkExchangeLimiter = rateLimit({
+      windowMs: 60_000,
+      max: 20,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => ipKeyGenerator(req.ip || "0.0.0.0"),
+    });
+    app.post("/api/auth/clerk-exchange", clerkExchangeLimiter, async (req, res) => {
+      try {
+        const clerkSecret = process.env.CLERK_SECRET_KEY;
+        if (!clerkSecret) return res.status(503).json({ error: "Clerk not configured" });
+        const { sessionToken } = req.body || {};
+        if (!sessionToken || typeof sessionToken !== "string") {
+          return res.status(400).json({ error: "Missing sessionToken" });
+        }
+
+        const { createClerkClient, verifyToken } = await import("@clerk/backend");
+        const clerk = createClerkClient({ secretKey: clerkSecret });
+
+        let payload: any;
+        try {
+          payload = await verifyToken(sessionToken, { secretKey: clerkSecret });
+        } catch (e: any) {
+          return res.status(401).json({ error: "Invalid Clerk session" });
+        }
+        const clerkUserId = payload?.sub as string | undefined;
+        if (!clerkUserId) return res.status(401).json({ error: "Invalid Clerk session" });
+
+        const clerkUser = await clerk.users.getUser(clerkUserId);
+        const email = clerkUser.emailAddresses?.find(e => e.id === clerkUser.primaryEmailAddressId)?.emailAddress
+          || clerkUser.emailAddresses?.[0]?.emailAddress || null;
+        const firstName = clerkUser.firstName || "";
+        const lastName = clerkUser.lastName || "";
+        const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+        const photo = clerkUser.imageUrl || null;
+
+        // Find by clerkUserId first, then by email
+        let [user] = await db.select().from(users).where(eq(users.clerkUserId, clerkUserId)).limit(1);
+        if (!user && email) {
+          [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+          if (user) {
+            if (user.clerkUserId && user.clerkUserId !== clerkUserId) {
+              // Email belongs to a different Clerk identity — refuse to re-bind.
+              return res.status(409).json({ error: "An account already exists for this email under a different login. Please sign in with your original method." });
+            }
+            if (!user.clerkUserId) {
+              await db.update(users).set({ clerkUserId }).where(eq(users.id, user.id));
+            }
+          }
+        }
+
+        const isNewUser = !user;
+        if (!user) {
+          try {
+            [user] = await db.insert(users).values({
+              clerkUserId,
+              email: email || undefined,
+              name: fullName || "",
+              dob: new Date(),
+              gender: "male",
+              city: "",
+              photos: photo ? [photo] : [],
+              verified: false,
+            }).returning();
+            await db.insert(cubeWallets).values({ userId: user.id, balance: 100 });
+            await db.insert(preferences).values({ userId: user.id });
+          } catch (e: any) {
+            // Race: a concurrent exchange created the row first. Re-select by clerkUserId.
+            if (e?.code === "23505") {
+              [user] = await db.select().from(users).where(eq(users.clerkUserId, clerkUserId)).limit(1);
+              if (!user && email) {
+                [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+              }
+              if (!user) throw e;
+            } else {
+              throw e;
+            }
+          }
+        }
+
+        const token = jwt.sign({ userId: user.id }, JWT_SECRET);
+        res.json({ success: true, token, user, isNewUser });
+      } catch (error: any) {
+        console.error("[clerk-exchange] error:", error);
+        res.status(500).json({ error: error.message || "Clerk exchange failed" });
+      }
+    });
+
     // ============ USER ROUTES ============
     
     // Get current user
