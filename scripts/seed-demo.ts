@@ -3,6 +3,7 @@ import {
   venues, rooms, events, roomPresence, tickets,
   users, preferences, cubeWallets, cubeTransactions,
   seasons, quests, questProgress, leaderboards, subscriptions,
+  swipes, matches, messages,
 } from "../shared/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
@@ -160,6 +161,11 @@ async function main() {
     process.exit(0);
   }
 
+  // Demo user: auto-verified + onboarded so selfie & onboarding gates don't block the demo.
+  await db.update(users)
+    .set({ verified: true, name: demoUser.name || "Alex", city: "Bangalore" })
+    .where(eq(users.id, demoUser.id));
+
   // CUBES — top up the demo wallet to 850 and log recent transactions
   await db.update(cubeWallets)
     .set({ balance: 850, totalEarned: 1240, totalSpent: 390, updatedAt: new Date() })
@@ -221,6 +227,40 @@ async function main() {
     endsAt: new Date(now.getTime() + 23 * 24 * 3600 * 1000),
     status: "active" as const,
   });
+
+  // ============ DEMO MATCHES — guarantee a ready-to-chat conversation ============
+  // Pair the demo user with the first 2 NPCs (Ananya + Riya). Reciprocal swipes,
+  // icebreaker game marked complete, and a couple of seed messages so chat opens hot.
+  const matchPartners = npcIds.slice(0, 2);
+  for (const partnerId of matchPartners) {
+    // Reciprocal swipes
+    await db.insert(swipes).values([
+      { swiperId: demoUser.id, swipedId: partnerId, liked: true },
+      { swiperId: partnerId, swipedId: demoUser.id, liked: true },
+    ]).onConflictDoNothing();
+    // Match (avoid dupes)
+    const [aId, bId] = demoUser.id < partnerId ? [demoUser.id, partnerId] : [partnerId, demoUser.id];
+    const existing = await db.select().from(matches)
+      .where(and(eq(matches.userAId, aId), eq(matches.userBId, bId))).limit(1);
+    let m = existing[0];
+    if (!m) {
+      const [created] = await db.insert(matches).values({
+        userAId: aId, userBId: bId, icebreakerCompleted: true,
+      }).returning();
+      m = created;
+    } else {
+      await db.update(matches).set({ icebreakerCompleted: true }).where(eq(matches.id, m.id));
+    }
+    // Seed a couple of messages from the NPC so the thread isn't empty
+    const existingMsgs = await db.select().from(messages).where(eq(messages.matchId, m.id)).limit(1);
+    if (existingMsgs.length === 0) {
+      await db.insert(messages).values([
+        { matchId: m.id, senderId: partnerId, body: "Hey! Loved the icebreaker round 😄", createdAt: new Date(now.getTime() - 30 * 60 * 1000) },
+        { matchId: m.id, senderId: partnerId, body: "Free this weekend?",                  createdAt: new Date(now.getTime() - 25 * 60 * 1000) },
+      ]);
+    }
+  }
+  console.log(`Demo matches ready: ${matchPartners.length} (ice broken, chat seeded)`);
 
   console.log("Demo upgrades: wallet=850 cubes, season + 5 quests, premium active, leaderboard seeded.");
   console.log("Demo seed complete.");
