@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { useState } from "react";
-import { X, Heart, Gift, ArrowLeft, Clock, Users, BadgeCheck, MessageCircle, Flag, Ban } from "lucide-react";
+import { X, Heart, ArrowLeft, Clock, Users, BadgeCheck, MessageCircle, Flag, Ban } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import RoomChatPanel from "@/components/RoomChatPanel";
@@ -36,7 +36,6 @@ export default function RoomDiscoveryPage() {
   const { toast } = useToast();
   const [index, setIndex] = useState(0);
   const [leaving, setLeaving] = useState<"left" | "right" | null>(null);
-  const [gifted, setGifted] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const qc = useQueryClient();
@@ -84,15 +83,8 @@ export default function RoomDiscoveryPage() {
   const current = profiles[index];
   const done = index >= profiles.length;
 
-  const handleAction = (action: "like" | "pass" | "gift") => {
+  const handleAction = (action: "like" | "pass") => {
     if (!current) return;
-
-    if (action === "gift") {
-      setGifted(true);
-      toast({ title: "🎁 Gift sent!", description: `You sent a drink to ${current.name || "them"}` });
-      return;
-    }
-
     setLeaving(action === "like" ? "right" : "left");
     if (current.id) {
       swipeMutation.mutate({ swipedId: current.id, liked: action === "like" });
@@ -102,7 +94,6 @@ export default function RoomDiscoveryPage() {
     }
     setTimeout(() => {
       setLeaving(null);
-      setGifted(false);
       setIndex(i => i + 1);
     }, 350);
   };
@@ -289,20 +280,6 @@ export default function RoomDiscoveryPage() {
                 data-testid="button-pass"
               >
                 <X className="w-6 h-6 text-white/70" />
-              </button>
-
-              {/* Gift */}
-              <button
-                onClick={() => handleAction("gift")}
-                className="w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90"
-                style={{
-                  background: gifted ? "rgba(0,207,255,0.3)" : "rgba(0,207,255,0.1)",
-                  border: "1.5px solid rgba(0,207,255,0.4)",
-                  boxShadow: gifted ? "0 0 20px rgba(0,207,255,0.5)" : "none"
-                }}
-                data-testid="button-gift"
-              >
-                <Gift className="w-5 h-5 text-icebreaker-teal" />
               </button>
 
               {/* Like */}
