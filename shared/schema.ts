@@ -16,7 +16,9 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
   // Users table
   export const users = pgTable("users", {
     id: serial("id").primaryKey(),
-    phone: varchar("phone", { length: 15 }).unique().notNull(),
+    phone: varchar("phone", { length: 15 }).unique(),
+    email: varchar("email", { length: 255 }).unique(),
+    clerkUserId: varchar("clerk_user_id", { length: 100 }).unique(),
     name: varchar("name", { length: 100 }).notNull(),
     dob: timestamp("dob").notNull(),
     gender: genderEnum("gender").notNull(),

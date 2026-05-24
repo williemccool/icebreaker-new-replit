@@ -1,10 +1,72 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Smartphone, User, GlassWater } from "lucide-react";
+import { Smartphone, GlassWater } from "lucide-react";
+import { SiGoogle } from "react-icons/si";
+import { useAuth, useSignIn, useUser } from "@clerk/clerk-react";
+
+const CLERK_ENABLED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
 export default function AuthPage({ onAuth }: { onAuth: () => void }) {
+  return CLERK_ENABLED ? <AuthPageInner onAuth={onAuth} /> : <AuthPageInnerNoClerk onAuth={onAuth} />;
+}
+
+function AuthPageInner({ onAuth }: { onAuth: () => void }) {
+  const { isSignedIn, getToken } = useAuth();
+  const { isLoaded: signInLoaded, signIn } = useSignIn();
+  const { isLoaded: userLoaded } = useUser();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { toast } = useToast();
+
+  // If Clerk session exists (e.g. returning from OAuth redirect), exchange for our JWT.
+  useEffect(() => {
+    if (!isSignedIn || !userLoaded) return;
+    (async () => {
+      try {
+        const sessionToken = await getToken();
+        if (!sessionToken) return;
+        const res = await fetch("/api/auth/clerk-exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem("token", data.token);
+          onAuth();
+        } else {
+          toast({ title: "Google sign-in failed", variant: "destructive" });
+        }
+      } catch (e) {
+        console.error("clerk-exchange failed", e);
+      }
+    })();
+  }, [isSignedIn, userLoaded]);
+
+  const continueWithGoogle = async () => {
+    if (!signInLoaded || !signIn) return;
+    setGoogleLoading(true);
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: window.location.origin + "/",
+        redirectUrlComplete: window.location.origin + "/",
+      });
+    } catch (e: any) {
+      setGoogleLoading(false);
+      toast({ title: "Couldn't start Google sign-in", description: e?.errors?.[0]?.message || "Try again", variant: "destructive" });
+    }
+  };
+
+  return <AuthPageBase onAuth={onAuth} googleEnabled googleLoading={googleLoading} onGoogle={continueWithGoogle} />;
+}
+
+function AuthPageInnerNoClerk({ onAuth }: { onAuth: () => void }) {
+  return <AuthPageBase onAuth={onAuth} googleEnabled={false} googleLoading={false} onGoogle={() => {}} />;
+}
+
+function AuthPageBase({ onAuth, googleEnabled, googleLoading, onGoogle }: { onAuth: () => void; googleEnabled: boolean; googleLoading: boolean; onGoogle: () => void }) {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"welcome" | "phone" | "otp">("welcome");
@@ -154,20 +216,23 @@ export default function AuthPage({ onAuth }: { onAuth: () => void }) {
               onClick={() => setStep("phone")}
               className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-3 transition-all active:scale-95"
               style={{ background: "linear-gradient(135deg, #FF1B8D 0%, #d6007a 100%)", boxShadow: "0 0 30px rgba(255,27,141,0.4)" }}
-              data-testid="button-continue-google"
-            >
-              <User className="w-5 h-5" />
-              Continue with phone
-            </button>
-            <button
-              onClick={() => setStep("phone")}
-              className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-3 transition-all active:scale-95"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(0,207,255,0.4)" }}
               data-testid="button-continue-phone"
             >
-              <Smartphone className="w-5 h-5 text-icebreaker-teal" />
+              <Smartphone className="w-5 h-5" />
               Continue with phone
             </button>
+            {googleEnabled && (
+              <button
+                onClick={onGoogle}
+                disabled={googleLoading}
+                className="w-full h-14 rounded-full font-bold text-white text-base flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-60"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(0,207,255,0.4)" }}
+                data-testid="button-continue-google"
+              >
+                <SiGoogle className="w-5 h-5 text-icebreaker-teal" />
+                {googleLoading ? "Opening Google…" : "Continue with Google"}
+              </button>
+            )}
             <p className="text-center text-xs text-icebreaker-muted pt-1">
               Already have an account?{" "}
               <span className="text-white font-semibold cursor-pointer underline underline-offset-2" onClick={() => setStep("phone")}>Log in</span>
