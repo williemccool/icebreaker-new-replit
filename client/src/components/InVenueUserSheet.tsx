@@ -51,7 +51,7 @@ export default function InVenueUserSheet({ userId, venueName, onClose }: Props) 
   if (userId == null) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" data-testid="sheet-in-venue-user">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center" data-testid="sheet-in-venue-user">
       {/* Backdrop */}
       <div
         className="absolute inset-0"
