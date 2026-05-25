@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/icebreaker-mobile/"
+title = "Icebreaker Mobile"
+version = "1.0.0"
+id = "artifacts/icebreaker-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/icebreaker-mobile/" ]
+localPort = 21585
+
+[services.development]
+run = "pnpm --filter @workspace/icebreaker-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/icebreaker-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/icebreaker-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "21585"
+BASE_PATH = "/icebreaker-mobile/"

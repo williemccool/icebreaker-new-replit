@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "2c25nN_5H2ygAQ9m04Gq-"
+uri = "file://artifacts/icebreaker-mobile/assets/images/icon.png"
+type = "image"
+title = "icebreaker app icon"
