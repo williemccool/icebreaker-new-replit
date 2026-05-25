@@ -1,0 +1,166 @@
+SYSTEM ROLE: You are a senior product+platform team generating a production-ready MVP for **Icebreaker**, a youth-first dating app for India that fuses virtual rooms with real Pub/Restaurant meetups. Optimize for Android first (iOS parity), low burn, quick iteration, safe-by-default, and analytics from day 1.
+
+NORTH STAR
+- Make breaking the ice effortless → fun AI openers + light games
+- Convert chats into **safe IRL meetups** (events + date booking at partner venues)
+- Women-first trust & verification, vernacular-ready (Hindi first)
+
+DIFFERENTIATORS
+1) **Virtual Rooms** mapped to real venues (geo-gated, cap ~12, time-boxed 20 min, WebSockets presence)
+2) **AI Icebreaker Assistant**: 3 opener suggestions per new match, stalled-chat nudges, context-aware (Hinglish when useful)
+3) **Cubes + Seasons**: in-app currency, quests, leaderboards; redeem for boosts, gifts, event discounts
+4) **IRL Engine**: curated mixers with QR check-in & venue discounts; “Set a Date” flow with partner shortlists
+5) **Safety**: selfie/video verification, deception detection, image safety blur, 1-tap report/auto-restrict, private mode
+
+LAUNCH PLAN
+- Phase 1 (0–3 mo): Bangalore seed (campus ambassadors + 2-4 mixers + 10 venues in Indiranagar/Koramangala/HSR)
+- Phase 2 (3–12 mo): Metros (Mumbai/Delhi/Pune/Hyd/Chennai) + Hindi UI + regional events
+- KPIs: D1/D7 retention, women verified %, match→first message %, chat→date %, venue QR redemption %, report rate, L28 revenue/active
+
+TECH STACK
+- Mobile: **React Native (Expo)**, react-navigation, react-query, OTA updates, FCM/APNs
+- API: **NestJS + TypeScript**, REST+GraphQL, **Socket.IO** for rooms/presence, BullMQ for jobs
+- AI services: **FastAPI (Python)** for (a) Matching Ranker (two-tower embeddings + LightGBM/XGBoost) (b) NLG openers (server-side LLM) (c) Safety filters (toxicity, deception heuristics)
+- Data: **PostgreSQL** (Prisma), Redis (presence/queues), S3 (+CloudFront) for media
+- Payments: Razorpay (INR), Stripe (int’l ready)
+- Analytics: Segment/RudderStack → BigQuery; Amplitude product analytics; Prometheus/Grafana ops
+- Infra: Docker, ECS Fargate (or Railway/Fly for MVP), Terraform IaC, Unleash feature flags
+- Security: JWT+ROT, RBAC, rate limits, PII encryption at rest, signed URLs, consented analytics, deletion workflow
+
+COLOR & ACCESSIBILITY (night-first)
+- BG #121316, Surface #1C1F24, Text #E6E8EC, Primary Coral #FF6B6B, Accent Orchid #B06EFF,
+  Success #27C4A1, Warning #FFB020; min WCAG 4.5:1; large tap targets; haptics
+
+REPO MONO STRUCTURE
+apps/
+  mobile/ (Expo RN)
+  api/ (NestJS)
+  ai/ (FastAPI: matching, nlg, safety)
+  admin/ (Next.js simple ops dashboard)
+packages/
+  ui/ (shared RN components)
+  types/ (Zod/TypeScript contracts)
+  config/ (eslint, prettier, tsconfig)
+infra/
+  terraform/, docker/, github-actions/
+docs/
+  openapi.yaml, runbooks/, analytics-events.md
+
+ENV (example)
+- DB_URL, REDIS_URL, S3_BUCKET, CDN_URL
+- JWT_SECRET, RAZORPAY_KEY/SECRET, RAZORPAY_WEBHOOK_SECRET
+- OPENAI_API_KEY (or Anthropic), SAFETY_THRESHOLD, SEGMENT_WRITE_KEY
+- GEO_PROVIDER_KEY (Google/Mapbox), IMAGE_MODERATION_KEY
+
+DATA MODEL (Prisma-ish sketch)
+User(id, phone, name, dob, gender, pronouns, city, langs[], bio, interests[], photos[], verified, selfie_hash, created_at)
+Preference(user_id, age_min, age_max, distance_km, interests[], intent, show_in_virtual_rooms)
+Match(id, user_a, user_b, status[matched|blocked], created_at)
+Message(id, match_id, sender_id, body, meta{ai:boolean}, created_at)
+Room(id, venue_id, name, capacity, starts_at, ends_at, virtual:boolean)
+RoomPresence(room_id, user_id, joined_at, left_at)
+Venue(id, name, addr, lat, lng, partner:boolean, perks[], qr_scheme)
+Event(id, city, venue_id, title, starts_at, ends_at, price, capacity, host_id, status)
+Ticket(id, event_id, user_id, qr_code, checked_in_at, price_paid, currency)
+CubeWallet(user_id, balance)
+CubeTxn(id, user_id, kind[earn|spend], amount, meta, created_at)
+Season(id, title, start, end)
+Quest(id, season_id, code, title, goal_type, goal_value, reward_cubes)
+QuestProgress(user_id, quest_id, progress, completed_at)
+Leaderboard(id, season_id, user_id, score)
+Subscription(id, user_id, plan, starts_at, ends_at, status)
+Boost(id, user_id, type, starts_at, ends_at)
+Report(id, reporter_id, target_user_id, reason, evidence[], status)
+
+CORE FLOWS TO IMPLEMENT
+
+1) AUTH + ONBOARD
+- Phone+OTP, selfie capture → face-match (basic cosine on embeddings; manual fallback queue)
+- Profile prompts (fun, short), interests (multi-select), languages, nightlife vibe, safety prefs
+- Verification badge on pass; block/limit features if not verified
+
+2) DISCOVER: SWIPE + VIRTUAL ROOMS
+- Swipe stack w/ daily soft cap for free users (build anticipation)
+- Virtual Rooms: join/leave, hard cap=12, 20-min session timer, live presence via WebSockets, room chat
+- Room types: open, partner-only, premium; geo-fenced entry near venue optionally
+- Anti-creep rules: balanced queueing, message rate-limits, report → auto-mute
+
+3) MATCH + CHAT
+- On match, call AI Openers → return 3 concise, context-aware lines (Hinglish allowed), safe tone
+- Stalled chat nudge (after 24h idle): propose 2 topic pivots + 1 IRL suggestion (nearby partner spot)
+- Toxicity filter pre-send; image safety → blur until accept
+
+4) IRL: DATE BOOKING + EVENTS
+- “Set a Date”: choose partner venue, day/time, auto-generate sharable **QR discount**
+- Events module: city feed, ticketing (₹), waitlist, host tools, QR check-in (Ticket.checked_in_at)
+- Venue portal (admin): create perks, set inventory windows, view redemptions
+
+5) CUBES + SEASONS + QUESTS
+- Season length = 6 weeks; daily/weekly quests: “enter 2 rooms”, “send opener in 3 matches”, “attend mixer”
+- Earn Cubes + XP; **sinks**: gifts, boosts, premium rooms, event discounts, profile spotlight
+- Leaderboards (city + global); anti-grind caps; emphasize quality actions (first_reply<=6h, date_booked)
+
+6) SAFETY & TRUST
+- Deception/Spam heuristics: duplicate selfies, link spam, templated messages → shadow restrict + review queue
+- Photo safety: NSFW detection → blur; “private mode” watermarks screenshots
+- Reporting: one-tap, categories (harassment, scam, impersonation, obscene); SLA dashboard for moderators
+
+7) MONETIZATION
+- Plans: Lite ₹199/mo, Premium ₹699/mo, God Mode ₹1,499/mo (unlimited rooms, see-likes, 2× XP, 1 boost/wk, premium rooms, AI+)
+- Microtransactions: Cubes bundles, Super Likes, room Boosts
+- Events revenue: paid mixers ₹299–₹1499; VIP pass; brand-sponsored nights
+- A/B city-wise dynamic pricing; student verification discounts
+
+8) ANALYTICS (instrument every step)
+Core events: signup_verified, profile_completed, room_joined, match_created, ai_opener_used, chat_10msg,
+date_booked, event_ticket_bought, venue_qr_redeemed, report_submitted, subscription_started
+Funnels: install→verify, match→first_msg, chat→date, events: ticket→check-in
+Alerts: report rate >1.5% day, DAU drop >10%, women DAU <35%, verify fails spike
+
+ENDPOINTS (NestJS outline)
+POST /auth/otp/send, /auth/otp/verify
+GET/PUT /me, /preferences
+GET /discover (swipe batch), POST /swipe
+WS /rooms/{id}/join, /leave, presence; REST /rooms (list/create admin)
+POST /matches/{id}/message, GET /matches, GET /matches/{id}/thread
+POST /ai/openers, POST /ai/moderate, POST /ai/match/rank
+GET /venues, GET /venues/{id}, POST /dates (create), GET /dates/{id}/qr
+GET /events, POST /events/{id}/tickets, GET /tickets/{id}/qr, POST /tickets/{id}/checkin (admin)
+GET /wallet, POST /wallet/earn, /wallet/spend
+GET /season, GET /quests, POST /quests/{id}/progress
+POST /reports
+
+AI SERVICE CONTRACTS
+POST /nlg/openers {my_profile, their_profile, last_msg?, locale} → {openers:[str,str,str]}
+POST /rank/matches {user_id, candidates[]} → {scored:[{id,score}]}
+POST /safety/moderate {text|image_url} → {allowed:boolean, reasons[]}
+POST /verify/face {selfie, profile_photo} → {match_score}
+
+JOB QUEUES
+- ai_nlg_generate, ai_rank_refresh (nightly), safety_scan, verify_selfie_review, events_ticket_email, payments_webhooks
+
+MOBILE SCREENS
+- Auth & selfie verify → Profile setup (fun prompt chips) → Swipe → Virtual Room → Match → Chat (AI openers UI) → Set a Date
+- Events list → Ticket purchase → Wallet (Cubes) → Quests/Season → Leaderboard
+- Safety center → Report flow
+- Settings: language (EN/Hindi), privacy, notifications
+
+WEEKLY DELIVERY (4-week MVP)
+W1: Auth+Profile+Verify; Rooms (create/join/presence); Swipe+Match; DB schema; S3 uploads
+W2: Chat WS; AI Openers (server call); Cubes wallet; Quests engine v1; Leaderboard skeleton
+W3: Events/tickets/QR; Venue admin; Date booking; Razorpay subs & microtx; Boosts; “See likes”
+W4: Moderation/report, deception heuristics, NSFW blur; analytics events; referrals + invite links; perf/load tests
+
+QUALITY GATES
+- Crash-free sessions ≥ 99.5%, P95 API < 250ms, WebSocket drops < 1%/hr
+- Security: JWT rotation, rate limits, signed S3 URLs, PII enc-at-rest
+- Accessibility: color contrast, font scaling, TalkBack/VoiceOver pass on core flows
+
+DELIVERABLES
+- Running mobile app (Android APK + iOS TestFlight), deployed API+AI, admin panel, OpenAPI, .env.sample, Terraform, dashboards
+- Seed fixtures: 100 users, 10 partner venues (BLR), 3 events, 30 quests, 20 gifts
+
+INSTRUCTIONS
+- If any dependency is missing, scaffold minimal working code and stubs; do not block.
+- Default language EN; include Hindi toggles and locale pipeline for strings; AI can output Hinglish for openers when locale=hi-IN.
+- Ship with feature flags for: Virtual Rooms, Events, AI Openers, Safety Blur, Dynamic Pricing.
