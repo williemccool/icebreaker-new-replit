@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -69,9 +70,11 @@ export default function HomeScreen() {
       >
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <View style={[styles.headerLogo, { backgroundColor: colors.primary }]}>
-              <Feather name="heart" size={14} color="#FFF" />
-            </View>
+            <Image
+              source={require("../../assets/images/logo.png")}
+              style={{ width: 28, height: 28 }}
+              resizeMode="contain"
+            />
             <View>
               <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>TONIGHT IN</Text>
               <Text style={[styles.headerCity, { color: colors.foreground }]}>Bangalore</Text>
@@ -308,15 +311,15 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
   headerLogo: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  headerSub: { fontSize: 9, fontWeight: "800", letterSpacing: 1.5 },
-  headerCity: { fontSize: 14, fontWeight: "800", marginTop: -2 },
+  headerSub: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 1.5 },
+  headerCity: { fontSize: 14, fontFamily: "PlusJakartaSans_800ExtraBold", marginTop: -2 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconBtn: { width: 36, height: 36, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   avatarBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  avatarText: { color: "#FFF", fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
   tabRow: { gap: 6, paddingTop: 4 },
   tabPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "transparent" },
-  tabText: { fontSize: 13, fontWeight: "700" },
+  tabText: { fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
   content: { padding: 16, gap: 14 },
   rewardsCard: {
     borderRadius: 18,
@@ -326,48 +329,48 @@ const styles = StyleSheet.create({
   },
   rewardsInner: { flexDirection: "row", alignItems: "center", gap: 10 },
   rewardsIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  rewardsTag: { fontSize: 9, fontWeight: "800", letterSpacing: 1.2 },
-  rewardsTitle: { fontSize: 16, fontWeight: "800", marginTop: 2 },
-  rewardsSub: { fontSize: 11, fontWeight: "600", marginTop: 2 },
+  rewardsTag: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 1.2 },
+  rewardsTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_800ExtraBold", marginTop: 2 },
+  rewardsSub: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", marginTop: 2 },
   sectionCard: { borderRadius: 18, borderWidth: 1, padding: 16, gap: 6 },
-  cardTitle: { fontSize: 18, fontWeight: "800" },
-  cardSub: { fontSize: 13, fontWeight: "500", marginBottom: 4 },
+  cardTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  cardSub: { fontSize: 13, fontFamily: "PlusJakartaSans_500Medium", marginBottom: 4 },
   ctaButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 14, marginTop: 4 },
-  ctaText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  ctaText: { color: "#FFF", fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
   liveBadgeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
   liveBadge: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, borderWidth: 1 },
   liveDot: { width: 6, height: 6, borderRadius: 3 },
-  liveText: { fontSize: 9, fontWeight: "800" },
-  liveTime: { fontSize: 9, fontWeight: "700" },
+  liveText: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  liveTime: { fontSize: 9, fontFamily: "PlusJakartaSans_700Bold" },
   ghostCta: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 44, borderRadius: 14, borderWidth: 1.5, marginTop: 4 },
-  ghostCtaText: { fontSize: 14, fontWeight: "700" },
+  ghostCtaText: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
   quickGrid: { flexDirection: "row", gap: 8 },
   quickAction: { flex: 1, alignItems: "center", gap: 6, paddingVertical: 12, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.04)", borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
   quickIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  quickLabel: { fontSize: 10, fontWeight: "600", textAlign: "center" },
+  quickLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_600SemiBold", textAlign: "center" },
   listSection: { gap: 8 },
   listHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
-  listTitle: { fontSize: 15, fontWeight: "800" },
-  seeAll: { fontSize: 12, fontWeight: "700" },
+  listTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  seeAll: { fontSize: 12, fontFamily: "PlusJakartaSans_700Bold" },
   venueCard: { width: 140, borderRadius: 16, borderWidth: 1, overflow: "hidden", marginRight: 10, backgroundColor: "rgba(255,255,255,0.03)" },
   venueThumb: { height: 80, alignItems: "center", justifyContent: "center" },
-  venueName: { fontSize: 12, fontWeight: "700", paddingHorizontal: 10, paddingTop: 8 },
+  venueName: { fontSize: 12, fontFamily: "PlusJakartaSans_700Bold", paddingHorizontal: 10, paddingTop: 8 },
   venueMeta: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingBottom: 8, paddingTop: 4 },
   hotDot: { width: 5, height: 5, borderRadius: 2.5 },
-  hotText: { fontSize: 10, fontWeight: "700" },
-  venueArea: { fontSize: 10, fontWeight: "500" },
+  hotText: { fontSize: 10, fontFamily: "PlusJakartaSans_700Bold" },
+  venueArea: { fontSize: 10, fontFamily: "PlusJakartaSans_500Medium" },
   roomRow: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1 },
   roomIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1 },
-  roomName: { fontSize: 14, fontWeight: "700" },
-  roomCount: { fontSize: 12, fontWeight: "500", marginTop: 2 },
+  roomName: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
+  roomCount: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", marginTop: 2 },
   liveTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  liveTagText: { fontSize: 9, fontWeight: "800" },
+  liveTagText: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold" },
   eventCard: { borderRadius: 16, borderWidth: 1, overflow: "hidden", height: 120, justifyContent: "flex-end", padding: 12, backgroundColor: "#1a0d0d" },
   eventOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(10,10,12,0.7)" },
   eventContent: { position: "relative", zIndex: 1 },
-  eventType: { fontSize: 9, fontWeight: "800", letterSpacing: 1.2, marginBottom: 4 },
-  eventTitle: { fontSize: 15, fontWeight: "800", marginBottom: 2 },
-  eventDate: { fontSize: 12, fontWeight: "500" },
+  eventType: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 1.2, marginBottom: 4 },
+  eventTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_800ExtraBold", marginBottom: 2 },
+  eventDate: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium" },
   leaderboardCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -376,6 +379,6 @@ const styles = StyleSheet.create({
     padding: 14,
     backgroundColor: "rgba(255,176,32,0.06)",
   },
-  leaderboardTitle: { fontSize: 14, fontWeight: "800" },
-  leaderboardSub: { fontSize: 11, fontWeight: "500", marginTop: 2 },
+  leaderboardTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  leaderboardSub: { fontSize: 11, fontFamily: "PlusJakartaSans_500Medium", marginTop: 2 },
 });

@@ -1,10 +1,11 @@
 import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
   useFonts,
-} from "@expo-google-fonts/inter";
+} from "@expo-google-fonts/plus-jakarta-sans";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack, useRouter, usePathname } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -13,11 +14,17 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { setBaseUrl } from "@workspace/api-client-react";
+import { ClerkProvider } from "@clerk/clerk-expo";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuthContext } from "@/context/AuthContext";
 
 SplashScreen.preventAutoHideAsync();
+
+const CLERK_KEY =
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
+  (typeof process !== "undefined" && (process as any).env?.VITE_CLERK_PUBLISHABLE_KEY) ||
+  "";
 
 const queryClient = new QueryClient();
 
@@ -55,16 +62,19 @@ function RootLayoutNav() {
       <Stack.Screen name="events" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="safety" options={{ headerShown: false }} />
+      <Stack.Screen name="gift/[userId]" options={{ headerShown: false }} />
+      <Stack.Screen name="dates/plan/[matchId]" options={{ headerShown: false }} />
     </Stack>
   );
 }
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
   });
 
   useEffect(() => {
@@ -75,7 +85,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) return null;
 
-  return (
+  const app = (
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
@@ -91,5 +101,24 @@ export default function RootLayout() {
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
+  );
+
+  if (!CLERK_KEY) return app;
+
+  return (
+    <ClerkProvider publishableKey={CLERK_KEY} tokenCache={{
+      getToken: async () => {
+        try {
+          return (await import("@react-native-async-storage/async-storage")).default.getItem("clerk_token");
+        } catch { return null; }
+      },
+      saveToken: async (token: string) => {
+        try {
+          await (await import("@react-native-async-storage/async-storage")).default.setItem("clerk_token", token);
+        } catch {}
+      },
+    }}>
+      {app}
+    </ClerkProvider>
   );
 }

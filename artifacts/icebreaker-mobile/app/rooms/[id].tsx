@@ -15,13 +15,6 @@ import { useColors } from "@/hooks/useColors";
 import { get, post } from "@/lib/api";
 import * as Haptics from "expo-haptics";
 
-const AVATARS = [
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80",
-  "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600&q=80",
-  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600&q=80",
-  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=600&q=80",
-];
-
 const PROMPTS = [
   "The worst first date idea is\u2026",
   "You'd never catch me\u2026",
@@ -51,7 +44,7 @@ export default function RoomDiscoveryScreen() {
   const room = data?.room;
   const profiles = (data?.participants || []).map((u: any, i: number) => ({
     ...u,
-    photo: (u.photos as string[])?.[0] || AVATARS[i % AVATARS.length],
+    photo: (u.photos as string[])?.[0] || null,
     prompt: PROMPTS[i % PROMPTS.length],
     answer: u.bio || "Love meeting new people",
     age: u.dob ? Math.floor((Date.now() - new Date(u.dob).getTime()) / (365.25 * 24 * 3600 * 1000)) : 24,
@@ -194,29 +187,29 @@ const styles = StyleSheet.create({
   iconBtn: { width: 36, height: 36, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   roomPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, backgroundColor: "rgba(255,255,255,0.04)", maxWidth: "55%" },
   liveDot: { width: 6, height: 6, borderRadius: 3 },
-  roomName: { fontSize: 12, fontWeight: "700" },
+  roomName: { fontSize: 12, fontFamily: "PlusJakartaSans_700Bold" },
   countPill: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
-  countText: { fontSize: 11, fontWeight: "700" },
+  countText: { fontSize: 11, fontFamily: "PlusJakartaSans_700Bold" },
   cardArea: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
   cardWrap: { width: "100%", maxWidth: 360, alignItems: "center", gap: 16 },
   card: { width: "100%", aspectRatio: 3 / 4, borderRadius: 24, borderWidth: 1.5, overflow: "hidden", backgroundColor: "#0D0D12" },
   photoArea: { flex: 1, alignItems: "center", justifyContent: "center" },
   cardOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: "space-between", padding: 16 },
   promptBox: { padding: 12, borderRadius: 14, borderWidth: 1, backgroundColor: "rgba(10,10,12,0.7)" },
-  prompt: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8, marginBottom: 4 },
-  answer: { fontSize: 14, fontWeight: "600" },
+  prompt: { fontSize: 10, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 0.8, marginBottom: 4 },
+  answer: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold" },
   profileInfo: { paddingBottom: 8 },
-  profileName: { fontSize: 22, fontWeight: "800" },
+  profileName: { fontSize: 22, fontFamily: "PlusJakartaSans_800ExtraBold" },
   verifiedRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
-  verifiedText: { fontSize: 11, fontWeight: "700" },
+  verifiedText: { fontSize: 11, fontFamily: "PlusJakartaSans_700Bold" },
   dotsRow: { flexDirection: "row", gap: 4 },
   actions: { flexDirection: "row", gap: 24, marginTop: 4 },
   passBtn: { width: 64, height: 64, borderRadius: 32, borderWidth: 1.5, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.04)" },
   likeBtn: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
   doneState: { alignItems: "center", gap: 14 },
   doneIcon: { width: 72, height: 72, borderRadius: 36, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  doneTitle: { fontSize: 18, fontWeight: "800" },
-  doneSub: { fontSize: 13, fontWeight: "500", color: "#8A8FA8" },
+  doneTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  doneSub: { fontSize: 13, fontFamily: "PlusJakartaSans_500Medium", color: "#8A8FA8" },
   doneBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16, marginTop: 8 },
-  doneBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  doneBtnText: { color: "#FFF", fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
 });

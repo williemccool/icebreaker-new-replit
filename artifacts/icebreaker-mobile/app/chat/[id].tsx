@@ -174,8 +174,11 @@ export default function ChatScreen() {
 
       {/* Input */}
       <View style={[styles.inputWrap, { paddingBottom: insets.bottom + 8, borderTopColor: colors.border }]}>
-        <TouchableOpacity onPress={() => {}}>
+        <TouchableOpacity onPress={() => (router as any).push(`/dates/plan/${matchId}`)}>
           <Feather name="calendar" size={20} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => (router as any).push(`/gift/${otherUser?.id}`)}>
+          <Feather name="gift" size={20} color={colors.secondary} />
         </TouchableOpacity>
         <TextInput
           style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }]}
@@ -201,32 +204,32 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingBottom: 10, borderBottomWidth: 1 },
   backBtn: { width: 36, height: 36, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 15, fontWeight: "800" },
+  headerTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_800ExtraBold" },
   headerCenter: { flexDirection: "row", alignItems: "center", gap: 8 },
   headerAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  headerAvatarText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
-  headerName: { fontSize: 14, fontWeight: "800" },
+  headerAvatarText: { color: "#FFF", fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
+  headerName: { fontSize: 14, fontFamily: "PlusJakartaSans_800ExtraBold" },
   onlineRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   onlineDot: { width: 5, height: 5, borderRadius: 2.5 },
-  onlineText: { fontSize: 10, fontWeight: "700" },
+  onlineText: { fontSize: 10, fontFamily: "PlusJakartaSans_700Bold" },
   banner: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginHorizontal: 16, marginTop: 10, paddingVertical: 8, borderRadius: 12, borderWidth: 1, backgroundColor: "rgba(255,27,141,0.08)" },
-  bannerText: { fontSize: 12, fontWeight: "800", letterSpacing: 1 },
+  bannerText: { fontSize: 12, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 1 },
   msgRow: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   msgAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  msgAvatarText: { color: "#FFF", fontSize: 11, fontWeight: "700" },
+  msgAvatarText: { color: "#FFF", fontSize: 11, fontFamily: "PlusJakartaSans_700Bold" },
   msgBubble: { maxWidth: "75%", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
-  msgText: { fontSize: 14, fontWeight: "500", lineHeight: 20 },
+  msgText: { fontSize: 14, fontFamily: "PlusJakartaSans_500Medium", lineHeight: 20 },
   emptyChat: { alignItems: "center", paddingVertical: 30, gap: 8 },
   emptyIcon: { width: 48, height: 48, borderRadius: 16, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  emptyText: { fontSize: 13, fontWeight: "600" },
+  emptyText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold" },
   inputWrap: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingTop: 8, borderTopWidth: 1 },
-  input: { flex: 1, borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, fontWeight: "500", maxHeight: 100 },
+  input: { flex: 1, borderRadius: 18, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, fontFamily: "PlusJakartaSans_500Medium", maxHeight: 100 },
   sendBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   lockBody: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30, gap: 16 },
   lockAvatar: { width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center" },
-  lockAvatarText: { color: "#FFF", fontSize: 30, fontWeight: "800" },
-  lockTitle: { fontSize: 20, fontWeight: "800", textAlign: "center" },
-  lockSub: { fontSize: 13, fontWeight: "500", textAlign: "center", paddingHorizontal: 20 },
+  lockAvatarText: { color: "#FFF", fontSize: 30, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  lockTitle: { fontSize: 20, fontFamily: "PlusJakartaSans_800ExtraBold", textAlign: "center" },
+  lockSub: { fontSize: 13, fontFamily: "PlusJakartaSans_500Medium", textAlign: "center", paddingHorizontal: 20 },
   lockBtn: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, marginTop: 8 },
-  lockBtnText: { color: "#FFF", fontSize: 15, fontWeight: "700" },
+  lockBtnText: { color: "#FFF", fontSize: 15, fontFamily: "PlusJakartaSans_700Bold" },
 });

@@ -92,6 +92,17 @@ export default function MatchesScreen() {
                 ) : (
                   <Feather name="lock" size={16} color={colors.secondary} />
                 )}
+                {item.icebreakerCompleted && (
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      (router as any).push(`/gift/${item.otherUser?.id}`);
+                    }}
+                    style={{ marginTop: 6 }}
+                  >
+                    <Feather name="gift" size={14} color={colors.secondary} />
+                  </TouchableOpacity>
+                )}
                 {item.icebreakerCompleted && item.lastMessage && (
                   <Text style={[styles.time, { color: colors.mutedForeground }]}>
                     {new Date(item.lastMessage.createdAt).toLocaleTimeString("en-IN", {
@@ -130,22 +141,22 @@ export default function MatchesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 16, paddingBottom: 10, borderBottomWidth: 1 },
-  title: { fontSize: 20, fontWeight: "800" },
-  subtitle: { fontSize: 12, fontWeight: "600", marginTop: 2 },
+  title: { fontSize: 20, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  subtitle: { fontSize: 12, fontFamily: "PlusJakartaSans_600SemiBold", marginTop: 2 },
   card: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, borderWidth: 1 },
   avatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 18, fontWeight: "800" },
+  avatarText: { fontSize: 18, fontFamily: "PlusJakartaSans_800ExtraBold" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  name: { fontSize: 15, fontWeight: "700", flex: 1 },
+  name: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", flex: 1 },
   newBadge: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
-  newText: { fontSize: 9, fontWeight: "800" },
-  lastMsg: { fontSize: 12, fontWeight: "500", marginTop: 2 },
-  lockText: { fontSize: 12, fontWeight: "700", marginTop: 2 },
-  time: { fontSize: 10, fontWeight: "500", marginTop: 4 },
+  newText: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold" },
+  lastMsg: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", marginTop: 2 },
+  lockText: { fontSize: 12, fontFamily: "PlusJakartaSans_700Bold", marginTop: 2 },
+  time: { fontSize: 10, fontFamily: "PlusJakartaSans_500Medium", marginTop: 4 },
   empty: { alignItems: "center", paddingVertical: 60, gap: 12 },
   emptyIcon: { width: 64, height: 64, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  emptyTitle: { fontSize: 16, fontWeight: "700" },
-  emptySub: { fontSize: 12, fontWeight: "500", textAlign: "center", paddingHorizontal: 30 },
+  emptyTitle: { fontSize: 16, fontFamily: "PlusJakartaSans_700Bold" },
+  emptySub: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", textAlign: "center", paddingHorizontal: 30 },
   emptyBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, marginTop: 8 },
-  emptyBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  emptyBtnText: { color: "#FFF", fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
 });
