@@ -1228,7 +1228,15 @@ import type { Express, Request, Response, NextFunction } from "express";
           isNull(checkIns.checkedOutAt)
         ));
 
-        res.json({ venue, checkedInUsers });
+        // Deduplicate — keep only the most recent open check-in per user
+        const seen = new Set<number>();
+        const uniqueCheckedInUsers = checkedInUsers.filter(row => {
+          if (seen.has(row.user.id)) return false;
+          seen.add(row.user.id);
+          return true;
+        });
+
+        res.json({ venue, checkedInUsers: uniqueCheckedInUsers });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
@@ -1249,7 +1257,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if (existing) {
-          res.status(400).json({ error: "Already checked in" }); return;
+          res.json({ success: true, checkIn: existing, cubesEarned: 0, xpEarned: 0, alreadyCheckedIn: true }); return;
         }
         
         const cubesEarned = 10;
