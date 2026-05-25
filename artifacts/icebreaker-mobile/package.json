@@ -58,6 +58,9 @@
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.31",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
-    "expo-auth-session": "^56.0.11"
+    "expo-auth-session": "^56.0.11",
+    "expo-crypto": "^56.0.3",
+    "expo-local-authentication": "^56.0.4",
+    "expo-secure-store": "^56.0.4"
   }
 }
