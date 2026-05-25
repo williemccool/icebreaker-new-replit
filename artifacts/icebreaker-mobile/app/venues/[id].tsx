@@ -53,7 +53,14 @@ export default function VenueDetailScreen() {
   }
 
   const v = venue || {};
-  const people = venueData?.checkedInUsers || [];
+  const rawPeople = venueData?.checkedInUsers || [];
+  const people = rawPeople.map((p: any) => ({
+    id: p.user?.id ?? p.id,
+    name: p.user?.name ?? p.name,
+    gender: p.user?.gender ?? p.gender,
+    photos: p.user?.photos ?? p.photos ?? [],
+    checkIn: p.checkIn,
+  }));
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
