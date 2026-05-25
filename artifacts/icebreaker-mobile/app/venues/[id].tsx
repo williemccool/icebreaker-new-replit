@@ -121,7 +121,7 @@ export default function VenueDetailScreen() {
         </View>
 
         {activeTab === "people" && (
-          <View style={{ gap: 8 }}>
+          <View key="people" style={{ gap: 8 }}>
             {people.length === 0 ? (
               <View style={styles.empty}>
                 <Feather name="users" size={28} color={colors.mutedForeground} />
@@ -157,7 +157,7 @@ export default function VenueDetailScreen() {
         )}
 
         {activeTab === "rooms" && (
-          <View style={styles.empty}>
+          <View key="rooms" style={styles.empty}>
             <Feather name="radio" size={28} color={colors.mutedForeground} />
             <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>Live rooms appear here</Text>
             <TouchableOpacity

@@ -148,7 +148,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     const token = req.headers.authorization?.split(" ")[1];
     
     if (!token) {
-      return res.status(401).json({ error: "No token provided" });
+      res.status(401).json({ error: "No token provided" }); return;
     }
     
     try {
@@ -156,7 +156,7 @@ import type { Express, Request, Response, NextFunction } from "express";
       req.userId = decoded.userId;
       next();
     } catch (error) {
-      return res.status(401).json({ error: "Invalid token" });
+      res.status(401).json({ error: "Invalid token" }); return;
     }
   }
 
@@ -214,10 +214,69 @@ import type { Express, Request, Response, NextFunction } from "express";
     }
   }
 
+  // Seed realistic demo participants so the demo user sees people to swipe on.
+  // Uses a phone prefix "SEED_" to identify seeds; idempotent on every restart.
+  async function ensureDemoParticipants() {
+    try {
+      const SEEDS = [
+        { phone: "SEED_001", name: "Priya Sharma",   gender: "female", city: "Bangalore", bio: "Loves live music and rooftop sunsets", dob: new Date("1998-03-12") },
+        { phone: "SEED_002", name: "Aditya Rao",     gender: "male",   city: "Bangalore", bio: "Weekend trekker, foodie, startup nerd",  dob: new Date("1996-07-22") },
+        { phone: "SEED_003", name: "Nisha Verma",    gender: "female", city: "Bangalore", bio: "Dancing till 3am is self-care",          dob: new Date("2000-01-05") },
+        { phone: "SEED_004", name: "Karan Mehta",    gender: "male",   city: "Bangalore", bio: "Craft beer enthusiast, dog dad",          dob: new Date("1995-11-18") },
+        { phone: "SEED_005", name: "Ananya Iyer",    gender: "female", city: "Bangalore", bio: "Jazz, chai, and good conversation",       dob: new Date("1999-06-30") },
+        { phone: "SEED_006", name: "Rohan Das",      gender: "male",   city: "Bangalore", bio: "DJ by night, designer by day",            dob: new Date("1997-09-14") },
+        { phone: "SEED_007", name: "Meera Pillai",   gender: "female", city: "Bangalore", bio: "Reading, running, raving",                dob: new Date("2001-04-02") },
+        { phone: "SEED_008", name: "Vikram Singh",   gender: "male",   city: "Bangalore", bio: "Surfer catching Bengaluru vibes",          dob: new Date("1994-12-08") },
+        { phone: "SEED_009", name: "Divya Nair",     gender: "female", city: "Bangalore", bio: "Laugh loud, dream louder",                dob: new Date("1999-08-19") },
+        { phone: "SEED_010", name: "Arjun Bose",     gender: "male",   city: "Bangalore", bio: "Midnight snacks and long chats",          dob: new Date("1996-02-27") },
+      ] as const;
+
+      const seedIds: number[] = [];
+      for (const seed of SEEDS) {
+        const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.phone, seed.phone)).limit(1);
+        if (existing) {
+          seedIds.push(existing.id);
+        } else {
+          const [created] = await db.insert(users).values({
+            phone: seed.phone,
+            name: seed.name,
+            gender: seed.gender as any,
+            city: seed.city,
+            bio: seed.bio,
+            dob: seed.dob,
+            verified: true,
+          }).returning({ id: users.id });
+          await db.insert(cubeWallets).values({ userId: created.id, balance: 150 });
+          await db.insert(preferences).values({ userId: created.id });
+          seedIds.push(created.id);
+        }
+      }
+
+      // Make sure every active room has all seed users present.
+      const activeRooms = await db.select({ id: rooms.id }).from(rooms).where(eq(rooms.active, true));
+      for (const room of activeRooms) {
+        const existing = await db.select({ userId: roomPresence.userId })
+          .from(roomPresence)
+          .where(and(eq(roomPresence.roomId, room.id), isNull(roomPresence.leftAt)));
+        const presentIds = new Set(existing.map(p => p.userId));
+        for (const uid of seedIds) {
+          if (!presentIds.has(uid)) {
+            await db.insert(roomPresence).values({ roomId: room.id, userId: uid });
+          }
+        }
+      }
+      console.log(`[demo] Ensured ${seedIds.length} seed participants across ${activeRooms.length} rooms.`);
+    } catch (e) {
+      console.error("[demo] ensureDemoParticipants failed:", e);
+    }
+  }
+
   export function registerRoutes(app: Express): Server {
     // Kick off the live-rooms guard on boot, then re-check every 15 min.
     ensureLiveRooms();
     setInterval(ensureLiveRooms, 15 * 60 * 1000);
+    // Seed demo participants once on boot (idempotent).
+    ensureLiveRooms().then(() => ensureDemoParticipants());
 
     const httpServer = createServer(app);
     const io = new SocketServer(httpServer, {
@@ -391,12 +450,12 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/auth/send-otp", otpSendLimiter, async (req, res) => {
       try {
         const parsed = phoneSchema.safeParse(req.body || {});
-        if (!parsed.success) return res.status(400).json({ error: "Invalid phone" });
+        if (!parsed.success) { res.status(400).json({ error: "Invalid phone" }); return; }
         const { phone } = parsed.data;
 
         // Demo phone: do NOT call SMS provider — code is fixed and known to demo audience.
         if (phone === DEMO_PHONE) {
-          return res.json({ success: true, message: "Demo phone — use code 123456", demo: true });
+          res.json({ success: true, message: "Demo phone — use code 123456", demo: true }); return;
         }
 
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -429,7 +488,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/auth/verify-otp", otpVerifyLimiter, async (req, res) => {
       try {
         const parsed = verifySchema.safeParse(req.body || {});
-        if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+        if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
         const { phone, otp } = parsed.data;
 
         let verification: typeof otpVerifications.$inferSelect | undefined;
@@ -463,7 +522,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           }
 
           if (!verification) {
-            return res.status(400).json({ error: "Invalid or expired OTP" });
+            res.status(400).json({ error: "Invalid or expired OTP" }); return;
           }
 
           await db.update(otpVerifications)
@@ -527,10 +586,10 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/auth/clerk-exchange", clerkExchangeLimiter, async (req, res) => {
       try {
         const clerkSecret = process.env.CLERK_SECRET_KEY;
-        if (!clerkSecret) return res.status(503).json({ error: "Clerk not configured" });
+        if (!clerkSecret) { res.status(503).json({ error: "Clerk not configured" }); return; }
         const { sessionToken } = req.body || {};
         if (!sessionToken || typeof sessionToken !== "string") {
-          return res.status(400).json({ error: "Missing sessionToken" });
+          res.status(400).json({ error: "Missing sessionToken" }); return;
         }
 
         const { createClerkClient, verifyToken } = await import("@clerk/backend");
@@ -540,10 +599,10 @@ import type { Express, Request, Response, NextFunction } from "express";
         try {
           payload = await verifyToken(sessionToken, { secretKey: clerkSecret });
         } catch (e: any) {
-          return res.status(401).json({ error: "Invalid Clerk session" });
+          res.status(401).json({ error: "Invalid Clerk session" }); return;
         }
         const clerkUserId = payload?.sub as string | undefined;
-        if (!clerkUserId) return res.status(401).json({ error: "Invalid Clerk session" });
+        if (!clerkUserId) { res.status(401).json({ error: "Invalid Clerk session" }); return; }
 
         const clerkUser = await clerk.users.getUser(clerkUserId);
         const email = clerkUser.emailAddresses?.find(e => e.id === clerkUser.primaryEmailAddressId)?.emailAddress
@@ -560,7 +619,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           if (user) {
             if (user.clerkUserId && user.clerkUserId !== clerkUserId) {
               // Email belongs to a different Clerk identity — refuse to re-bind.
-              return res.status(409).json({ error: "An account already exists for this email under a different login. Please sign in with your original method." });
+              res.status(409).json({ error: "An account already exists for this email under a different login. Please sign in with your original method." }); return;
             }
             if (!user.clerkUserId) {
               await db.update(users).set({ clerkUserId }).where(eq(users.id, user.id));
@@ -636,7 +695,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if (!wallet) {
-          return res.json({ wallet: { balance: 0, totalEarned: 0, totalSpent: 0 } });
+          res.json({ wallet: { balance: 0, totalEarned: 0, totalSpent: 0 } }); return;
         }
         res.json({ wallet });
       } catch (error: any) {
@@ -680,11 +739,11 @@ import type { Express, Request, Response, NextFunction } from "express";
         const [season] = await db.select().from(seasons)
           .where(and(eq(seasons.active, true), lte(seasons.startDate, new Date()), gte(seasons.endDate, new Date())))
           .limit(1);
-        if (!season) return res.json({ rank: null, score: 0, total: 0, season: null });
+        if (!season) { res.json({ rank: null, score: 0, total: 0, season: null }); return; }
         const [me] = await db.select().from(leaderboards)
           .where(and(eq(leaderboards.seasonId, season.id), eq(leaderboards.userId, req.userId)))
           .limit(1);
-        if (!me) return res.json({ rank: null, score: 0, total: 0, season });
+        if (!me) { res.json({ rank: null, score: 0, total: 0, season }); return; }
         const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
           .from(leaderboards)
           .where(and(eq(leaderboards.seasonId, season.id), sql`${leaderboards.score} > ${me.score}`));
@@ -706,18 +765,16 @@ import type { Express, Request, Response, NextFunction } from "express";
         const { SHOP_CATALOG } = await import("../shop");
         const sku = String(req.body?.sku || "");
         const item = (SHOP_CATALOG as any)[sku];
-        if (!item) return res.status(400).json({ error: "Unknown SKU" });
+        if (!item) { res.status(400).json({ error: "Unknown SKU" }); return; }
         const amountInPaise = Number(item.priceInPaise) || 0;
-        if (amountInPaise <= 0) return res.status(400).json({ error: "Invalid amount for SKU" });
+        if (amountInPaise <= 0) { res.status(400).json({ error: "Invalid amount for SKU" }); return; }
 
         const rp = getRazorpay();
-        if (!rp) {
-          return res.status(503).json({
+        if (!rp) { res.status(503).json({
             error: "Razorpay not configured",
             fallback: "use_simulated",
             message: "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to enable real payments.",
-          });
-        }
+          }); return; }
         const order = await rp.orders.create({
           amount: amountInPaise,
           currency: "INR",
@@ -750,10 +807,10 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-          return res.status(400).json({ error: "Missing payment fields" });
+          res.status(400).json({ error: "Missing payment fields" }); return;
         }
         const secret = process.env.RAZORPAY_KEY_SECRET;
-        if (!secret) return res.status(503).json({ error: "Razorpay not configured" });
+        if (!secret) { res.status(503).json({ error: "Razorpay not configured" }); return; }
 
         const expected = crypto
           .createHmac("sha256", secret)
@@ -762,14 +819,14 @@ import type { Express, Request, Response, NextFunction } from "express";
         const sigBuf = Buffer.from(razorpay_signature, "utf8");
         const expBuf = Buffer.from(expected, "utf8");
         if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-          return res.status(400).json({ error: "Signature verification failed" });
+          res.status(400).json({ error: "Signature verification failed" }); return;
         }
 
         const [order] = await db.select().from(paymentOrders)
           .where(eq(paymentOrders.razorpayOrderId, razorpay_order_id)).limit(1);
-        if (!order) return res.status(404).json({ error: "Order not found" });
-        if (order.userId !== req.userId) return res.status(403).json({ error: "Order does not belong to user" });
-        if (order.status === "paid") return res.json({ ok: true, alreadyGranted: true, sku: order.sku });
+        if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+        if (order.userId !== req.userId) { res.status(403).json({ error: "Order does not belong to user" }); return; }
+        if (order.status === "paid") { res.json({ ok: true, alreadyGranted: true, sku: order.sku }); return; }
 
         await grantSkuEntitlement(req.userId, order.sku, { razorpayPaymentId: razorpay_payment_id });
 
@@ -856,7 +913,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         const { SHOP_CATALOG } = await import("../shop");
         const { sku } = req.body || {};
         const item = SHOP_CATALOG[sku];
-        if (!item) return res.status(400).json({ error: "Unknown SKU" });
+        if (!item) { res.status(400).json({ error: "Unknown SKU" }); return; }
 
         // Guard: if Razorpay IS configured, this fallback path is only allowed
         // for the demo phone so client showcases still work. Real users must
@@ -864,7 +921,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (getRazorpay()) {
           const [me] = await db.select({ phone: users.phone }).from(users).where(eq(users.id, req.userId)).limit(1);
           if (me?.phone !== DEMO_PHONE) {
-            return res.status(402).json({ error: "Payment required. Use /api/payments/create-order." });
+            res.status(402).json({ error: "Payment required. Use /api/payments/create-order." }); return;
           }
         }
 
@@ -882,7 +939,7 @@ import type { Express, Request, Response, NextFunction } from "express";
             userId: req.userId, kind: "earn", amount: total,
             meta: { reason: "purchase", sku, priceInPaise: item.priceInPaise },
           });
-          return res.json({ ok: true, sku, cubesAdded: total });
+          res.json({ ok: true, sku, cubesAdded: total }); return;
         }
 
         // GOD MODE SUBSCRIPTION (atomic)
@@ -907,7 +964,7 @@ import type { Express, Request, Response, NextFunction } from "express";
             }
             return newEndsAt;
           });
-          return res.json({ ok: true, sku, endsAt });
+          res.json({ ok: true, sku, endsAt }); return;
         }
 
         // SEASON PASS — grant a chunk of bonus cubes + flag in tx meta
@@ -924,7 +981,7 @@ import type { Express, Request, Response, NextFunction } from "express";
             userId: req.userId, kind: "earn", amount: bonus,
             meta: { reason: "season_pass", sku, priceInPaise: item.priceInPaise },
           });
-          return res.json({ ok: true, sku, cubesAdded: bonus });
+          res.json({ ok: true, sku, cubesAdded: bonus }); return;
         }
 
         res.status(400).json({ error: "Unsupported category" });
@@ -943,11 +1000,11 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if (!match) {
-          return res.status(404).json({ error: "Match not found" });
+          res.status(404).json({ error: "Match not found" }); return;
         }
 
         if (match.userAId !== req.userId && match.userBId !== req.userId) {
-          return res.status(403).json({ error: "Not authorized" });
+          res.status(403).json({ error: "Not authorized" }); return;
         }
 
         const otherId = match.userAId === req.userId ? match.userBId : match.userAId;
@@ -996,7 +1053,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if (!user) {
-          return res.status(404).json({ error: "User not found" });
+          res.status(404).json({ error: "User not found" }); return;
         }
         res.json({ user });
       } catch (error: any) {
@@ -1020,17 +1077,17 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (updates.dob !== undefined) {
           const d = typeof updates.dob === "string" ? new Date(updates.dob) : updates.dob;
           if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
-            return res.status(400).json({ error: "Invalid date of birth" });
+            res.status(400).json({ error: "Invalid date of birth" }); return;
           }
           const now = new Date();
           let age = now.getFullYear() - d.getFullYear();
           const m = now.getMonth() - d.getMonth();
           if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
           if (age < 18) {
-            return res.status(403).json({ error: "You must be 18 or older to use Icebreaker." });
+            res.status(403).json({ error: "You must be 18 or older to use Icebreaker." }); return;
           }
           if (age > 120) {
-            return res.status(400).json({ error: "Invalid date of birth" });
+            res.status(400).json({ error: "Invalid date of birth" }); return;
           }
           updates.dob = d;
         }
@@ -1052,12 +1109,12 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const { selfie } = req.body || {};
         if (typeof selfie !== "string" || !selfie.startsWith("data:image/")) {
-          return res.status(400).json({ error: "Invalid selfie payload" });
+          res.status(400).json({ error: "Invalid selfie payload" }); return;
         }
         // Very small sanity check — base64 payload should be non-trivial
         const b64 = selfie.split(",")[1] || "";
         if (b64.length < 1000) {
-          return res.status(400).json({ error: "Selfie image too small to verify" });
+          res.status(400).json({ error: "Selfie image too small to verify" }); return;
         }
         const hash = crypto.createHash("sha256").update(b64).digest("hex");
 
@@ -1144,7 +1201,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if (!venue) {
-          return res.status(404).json({ error: "Venue not found" });
+          res.status(404).json({ error: "Venue not found" }); return;
         }
         
         // Get people currently checked in — scrub PII (no phone/email/dob)
@@ -1192,7 +1249,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if (existing) {
-          return res.status(400).json({ error: "Already checked in" });
+          res.status(400).json({ error: "Already checked in" }); return;
         }
         
         const cubesEarned = 10;
@@ -1273,16 +1330,16 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/swipe", purchaseLimiter, authMiddleware, async (req: any, res) => {
       try {
         const parsed = swipeSchema.safeParse(req.body || {});
-        if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+        if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
         const { swipedId, liked } = parsed.data;
 
         if (swipedId === req.userId) {
-          return res.status(400).json({ error: "Cannot swipe yourself" });
+          res.status(400).json({ error: "Cannot swipe yourself" }); return;
         }
         // Cannot interact with blocked users (either direction)
         const blockedIds = await getBlockedUserIds(req.userId);
         if (blockedIds.includes(swipedId)) {
-          return res.status(403).json({ error: "User not available" });
+          res.status(403).json({ error: "User not available" }); return;
         }
 
         // Record swipe
@@ -1293,7 +1350,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         });
         
         if (!liked) {
-          return res.json({ matched: false });
+          res.json({ matched: false }); return;
         }
         
         // Check if other user liked back
@@ -1331,7 +1388,7 @@ import type { Express, Request, Response, NextFunction } from "express";
             })
             .where(eq(cubeWallets.userId, req.userId));
           
-          return res.json({ matched: true, match });
+          res.json({ matched: true, match }); return;
         }
         
         res.json({ matched: false });
@@ -1350,10 +1407,10 @@ import type { Express, Request, Response, NextFunction } from "express";
         const { packId, turn1Tone, turn3Tone } = req.body || {};
         const validTones = ["flirty", "subtle", "neutral"];
         if (typeof packId !== "string" || !validTones.includes(turn1Tone) || !validTones.includes(turn3Tone)) {
-          return res.status(400).json({ error: "packId, turn1Tone, turn3Tone required" });
+          res.status(400).json({ error: "packId, turn1Tone, turn3Tone required" }); return;
         }
         const pack = getPackById(packId);
-        if (!pack) return res.status(400).json({ error: "Unknown packId" });
+        if (!pack) { res.status(400).json({ error: "Unknown packId" }); return; }
 
         const result = await db.transaction(async (tx) => {
           const [match] = await tx.select().from(matches).where(eq(matches.id, matchId)).limit(1);
@@ -1391,7 +1448,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           return { code: 200, body: { messages: inserted, turn2Tone } };
         });
 
-        return res.status(result.code).json(result.body);
+        res.status(result.code).json(result.body); return;
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
@@ -1457,7 +1514,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .where(eq(matches.id, matchId))
           .limit(1);
         if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
-          return res.status(403).json({ error: "Access denied" });
+          res.status(403).json({ error: "Access denied" }); return;
         }
         
         const msgs = await db.select().from(messages)
@@ -1479,7 +1536,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .where(eq(matches.id, matchId))
           .limit(1);
         if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
-          return res.status(403).json({ error: "Access denied" });
+          res.status(403).json({ error: "Access denied" }); return;
         }
 
         const { body } = req.body;
@@ -1487,7 +1544,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         // Free chat is locked until the icebreaker conversation has been completed via
         // POST /api/matches/:id/icebreaker-conversation. No prefix-based bypass.
         if (!match.icebreakerCompleted) {
-          return res.status(403).json({ error: "Complete the icebreaker first" });
+          res.status(403).json({ error: "Complete the icebreaker first" }); return;
         }
         
         const [message] = await db.insert(messages).values({
@@ -1511,7 +1568,7 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const roomId = parseInt(req.params.id);
         const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId)).limit(1);
-        if (!room) return res.status(404).json({ error: "Room not found" });
+        if (!room) { res.status(404).json({ error: "Room not found" }); return; }
 
         const presences = await db.select().from(roomPresence)
           .where(and(eq(roomPresence.roomId, roomId), isNull(roomPresence.leftAt)));
@@ -1542,17 +1599,9 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const { venueId } = req.query;
         
-        let query = db.select().from(rooms)
-          .where(and(
-            eq(rooms.active, true),
-            gte(rooms.endsAt, new Date())
-          ));
-        
-        if (venueId) {
-          query = query.where(eq(rooms.venueId, parseInt(venueId as string))) as any;
-        }
-        
-        const activeRooms = await query;
+        const conditions: any[] = [eq(rooms.active, true), gte(rooms.endsAt, new Date())];
+        if (venueId) conditions.push(eq(rooms.venueId, parseInt(venueId as string)));
+        const activeRooms = await db.select().from(rooms).where(and(...conditions));
         
         // Get participant counts and gender ratios
         const roomsWithCounts = await Promise.all(activeRooms.map(async (room) => {
@@ -1587,14 +1636,9 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const { city, type } = req.query;
         
-        let query = db.select().from(events)
-          .where(gte(events.startsAt, new Date()));
-        
-        if (city) {
-          query = query.where(eq(events.city, city as string)) as any;
-        }
-        
-        const eventList = await query.orderBy(events.startsAt);
+        const evtConditions: any[] = [gte(events.startsAt, new Date())];
+        if (city) evtConditions.push(eq(events.city, city as string));
+        const eventList = await db.select().from(events).where(and(...evtConditions)).orderBy(events.startsAt);
         
         res.json(eventList);
       } catch (error: any) {
@@ -1612,7 +1656,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if (!event) {
-          return res.status(404).json({ error: "Event not found" });
+          res.status(404).json({ error: "Event not found" }); return;
         }
         
         // Check wallet balance
@@ -1621,7 +1665,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         
         if ((wallet?.balance ?? 0) < (event.price ?? 0)) {
-          return res.status(400).json({ error: "Insufficient cubes" });
+          res.status(400).json({ error: "Insufficient cubes" }); return;
         }
         
         // Create ticket
@@ -1645,7 +1689,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           await db.insert(cubeTransactions).values({
             userId: req.userId,
             kind: "spend",
-            amount: event.price,
+            amount: event.price ?? 0,
             meta: { reason: "event_ticket", eventId }
           });
         }
@@ -1756,29 +1800,29 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const parsed = giftSendSchema.safeParse(req.body);
         if (!parsed.success) {
-          return res.status(400).json({ error: "Invalid gift payload", details: parsed.error.flatten() });
+          res.status(400).json({ error: "Invalid gift payload", details: parsed.error.flatten() }); return;
         }
         const { recipientId, drinkName, matchId, venueId, note } = parsed.data;
 
         if (recipientId === req.userId) {
-          return res.status(400).json({ error: "You can't gift yourself a drink." });
+          res.status(400).json({ error: "You can't gift yourself a drink." }); return;
         }
 
         const drinkKey = drinkName.trim().toLowerCase();
         const drink = DRINK_CATALOG[drinkKey];
         if (!drink) {
-          return res.status(400).json({ error: "Unknown drink type" });
+          res.status(400).json({ error: "Unknown drink type" }); return;
         }
 
         // Block / report guard — don't let blocked relationships gift.
         const blockedIds = await getBlockedUserIds(req.userId);
         if (blockedIds.includes(recipientId)) {
-          return res.status(403).json({ error: "You can't gift this user." });
+          res.status(403).json({ error: "You can't gift this user." }); return;
         }
 
         // Recipient must exist.
         const [recipient] = await db.select().from(users).where(eq(users.id, recipientId)).limit(1);
-        if (!recipient) return res.status(404).json({ error: "Recipient not found" });
+        if (!recipient) { res.status(404).json({ error: "Recipient not found" }); return; }
 
         // Validate optional context: matchId must include the sender.
         let safeMatchId: number | undefined = matchId;
@@ -1814,7 +1858,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (debited.length === 0) {
           // Either wallet missing or insufficient balance under contention.
           const [w] = await db.select().from(cubeWallets).where(eq(cubeWallets.userId, req.userId)).limit(1);
-          return res.status(402).json({ error: "Insufficient cubes", needed: drink.cubes, balance: w?.balance ?? 0 });
+          res.status(402).json({ error: "Insufficient cubes", needed: drink.cubes, balance: w?.balance ?? 0 }); return;
         }
 
         // Create gift + ledger entry. If either fails we refund the cubes.
@@ -1919,7 +1963,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/gifts/:id/accept", authMiddleware, async (req: any, res) => {
       try {
         const giftId = parseInt(req.params.id);
-        if (Number.isNaN(giftId)) return res.status(400).json({ error: "Invalid id" });
+        if (Number.isNaN(giftId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
         const [gift] = await db.update(drinkGifts)
           .set({ accepted: true })
@@ -1929,7 +1973,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           ))
           .returning();
 
-        if (!gift) return res.status(404).json({ error: "Gift not found" });
+        if (!gift) { res.status(404).json({ error: "Gift not found" }); return; }
         res.json({ success: true, gift });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -1941,7 +1985,7 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const { qrCode } = req.body || {};
         if (typeof qrCode !== "string" || !qrCode) {
-          return res.status(400).json({ error: "Missing QR code" });
+          res.status(400).json({ error: "Missing QR code" }); return;
         }
         // Single atomic conditional update — guarantees one-shot redemption
         // even under concurrent requests.
@@ -1959,10 +2003,10 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (!updated) {
           // Distinguish reasons for clearer client messaging.
           const [existing] = await db.select().from(drinkGifts).where(eq(drinkGifts.qrCode, qrCode)).limit(1);
-          if (!existing) return res.status(404).json({ error: "Voucher not found" });
-          if (existing.recipientId !== req.userId) return res.status(403).json({ error: "Not your voucher" });
-          if (existing.redeemedAt) return res.status(409).json({ error: "Already redeemed", redeemedAt: existing.redeemedAt });
-          return res.status(410).json({ error: "Voucher expired" });
+          if (!existing) { res.status(404).json({ error: "Voucher not found" }); return; }
+          if (existing.recipientId !== req.userId) { res.status(403).json({ error: "Not your voucher" }); return; }
+          if (existing.redeemedAt) { res.status(409).json({ error: "Already redeemed", redeemedAt: existing.redeemedAt }); return; }
+          res.status(410).json({ error: "Voucher expired" }); return;
         }
         res.json({ success: true, gift: updated });
       } catch (error: any) {
@@ -1986,23 +2030,23 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const parsed = proposeDateSchema.safeParse(req.body);
         if (!parsed.success) {
-          return res.status(400).json({ error: "Invalid date payload", details: parsed.error.flatten() });
+          res.status(400).json({ error: "Invalid date payload", details: parsed.error.flatten() }); return;
         }
         const { matchId, venueId, bookingDate, location } = parsed.data;
 
         const when = new Date(bookingDate);
         if (Number.isNaN(when.getTime()) || when.getTime() < Date.now() - 60_000) {
-          return res.status(400).json({ error: "Date must be in the future" });
+          res.status(400).json({ error: "Date must be in the future" }); return;
         }
 
         const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
-        if (!match) return res.status(404).json({ error: "Match not found" });
+        if (!match) { res.status(404).json({ error: "Match not found" }); return; }
         if (match.userAId !== req.userId && match.userBId !== req.userId) {
-          return res.status(403).json({ error: "Not your match" });
+          res.status(403).json({ error: "Not your match" }); return;
         }
 
         const [venue] = await db.select().from(venues).where(eq(venues.id, venueId)).limit(1);
-        if (!venue) return res.status(404).json({ error: "Venue not found" });
+        if (!venue) { res.status(404).json({ error: "Venue not found" }); return; }
 
         const qrCode = nanoid(16);
         const [booking] = await db.insert(dateBookings).values({
@@ -2024,12 +2068,12 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.get("/api/dates/match/:matchId", authMiddleware, async (req: any, res) => {
       try {
         const matchId = parseInt(req.params.matchId);
-        if (Number.isNaN(matchId)) return res.status(400).json({ error: "Invalid match id" });
+        if (Number.isNaN(matchId)) { res.status(400).json({ error: "Invalid match id" }); return; }
 
         const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
-        if (!match) return res.status(404).json({ error: "Match not found" });
+        if (!match) { res.status(404).json({ error: "Match not found" }); return; }
         if (match.userAId !== req.userId && match.userBId !== req.userId) {
-          return res.status(403).json({ error: "Not your match" });
+          res.status(403).json({ error: "Not your match" }); return;
         }
 
         const list = await db
@@ -2062,19 +2106,19 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/dates/:id/confirm", authMiddleware, async (req: any, res) => {
       try {
         const bookingId = parseInt(req.params.id);
-        if (Number.isNaN(bookingId)) return res.status(400).json({ error: "Invalid id" });
+        if (Number.isNaN(bookingId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
         const [booking] = await db.select().from(dateBookings).where(eq(dateBookings.id, bookingId)).limit(1);
-        if (!booking) return res.status(404).json({ error: "Booking not found" });
+        if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
         if (booking.proposedBy === req.userId) {
-          return res.status(403).json({ error: "Only the other side can accept" });
+          res.status(403).json({ error: "Only the other side can accept" }); return;
         }
         const [match] = await db.select().from(matches).where(eq(matches.id, booking.matchId)).limit(1);
         if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
-          return res.status(403).json({ error: "Not your match" });
+          res.status(403).json({ error: "Not your match" }); return;
         }
         if (booking.confirmed) {
-          return res.json({ success: true, booking, cubesEarned: 0, already: true });
+          res.json({ success: true, booking, cubesEarned: 0, already: true }); return;
         }
 
         const [updated] = await db.update(dateBookings)
@@ -2103,13 +2147,13 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/dates/:id/decline", authMiddleware, async (req: any, res) => {
       try {
         const bookingId = parseInt(req.params.id);
-        if (Number.isNaN(bookingId)) return res.status(400).json({ error: "Invalid id" });
+        if (Number.isNaN(bookingId)) { res.status(400).json({ error: "Invalid id" }); return; }
 
         const [booking] = await db.select().from(dateBookings).where(eq(dateBookings.id, bookingId)).limit(1);
-        if (!booking) return res.status(404).json({ error: "Booking not found" });
+        if (!booking) { res.status(404).json({ error: "Booking not found" }); return; }
         const [match] = await db.select().from(matches).where(eq(matches.id, booking.matchId)).limit(1);
         if (!match || (match.userAId !== req.userId && match.userBId !== req.userId)) {
-          return res.status(403).json({ error: "Not your match" });
+          res.status(403).json({ error: "Not your match" }); return;
         }
         await db.delete(dateBookings).where(eq(dateBookings.id, bookingId));
         res.json({ success: true });
@@ -2171,13 +2215,11 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/reports", reportLimiter, authMiddleware, async (req: any, res) => {
       try {
         const parsed = reportBodySchema.safeParse(req.body || {});
-        if (!parsed.success) return res.status(400).json({ error: "Invalid report payload" });
+        if (!parsed.success) { res.status(400).json({ error: "Invalid report payload" }); return; }
         const { reportedUserId, contentType, contentId, reason } = parsed.data;
         const [row] = await db.insert(reports).values({
           reporterId: req.userId,
-          reportedUserId: reportedUserId || null,
-          contentType,
-          contentId: contentId || null,
+          targetUserId: reportedUserId ?? req.userId,
           reason,
           status: "pending",
         }).returning();
@@ -2198,12 +2240,12 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/blocks", authMiddleware, async (req: any, res) => {
       try {
         const parsed = blockBodySchema.safeParse(req.body || {});
-        if (!parsed.success) return res.status(400).json({ error: "Invalid block payload" });
+        if (!parsed.success) { res.status(400).json({ error: "Invalid block payload" }); return; }
         const { blockedId } = parsed.data;
-        if (blockedId === req.userId) return res.status(400).json({ error: "Cannot block yourself" });
+        if (blockedId === req.userId) { res.status(400).json({ error: "Cannot block yourself" }); return; }
         const [existing] = await db.select().from(blocks)
           .where(and(eq(blocks.blockerId, req.userId), eq(blocks.blockedId, blockedId))).limit(1);
-        if (existing) return res.json({ ok: true, block: existing, alreadyBlocked: true });
+        if (existing) { res.json({ ok: true, block: existing, alreadyBlocked: true }); return; }
         const [row] = await db.insert(blocks).values({ blockerId: req.userId, blockedId }).returning();
         res.json({ ok: true, block: row });
       } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -2223,7 +2265,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.post("/api/me/photos", uploadLimiter, authMiddleware, upload.array("photos", 6), async (req: any, res) => {
       try {
         const files = (req.files as Express.Multer.File[]) || [];
-        if (!files.length) return res.status(400).json({ error: "No files uploaded" });
+        if (!files.length) { res.status(400).json({ error: "No files uploaded" }); return; }
         const urls = files.map(f => `/uploads/${path.basename(f.path)}`);
         const [me] = await db.select({ photos: users.photos }).from(users).where(eq(users.id, req.userId)).limit(1);
         const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
@@ -2239,7 +2281,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.delete("/api/me/photos", authMiddleware, async (req: any, res) => {
       try {
         const url = String(req.body?.url || "");
-        if (!url) return res.status(400).json({ error: "url required" });
+        if (!url) { res.status(400).json({ error: "url required" }); return; }
         const [me] = await db.select({ photos: users.photos }).from(users).where(eq(users.id, req.userId)).limit(1);
         const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
         const next = existing.filter(p => p !== url);
