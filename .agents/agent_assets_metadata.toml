@@ -1,14 +1,8 @@
 uploads = []
-generated = []
+outputs = []
 
-[[outputs]]
-id = "Yi_MP34ltLbgqY309aEGR"
-uri = "file://ICEBREAKER_QA_AUDIT.md"
-type = "text"
-title = "Icebreaker App — Full Product & Engineering Audit"
-
-[[outputs]]
-id = "bevrPyWdgdiVoO7ImwOPP"
-uri = "file://attached_assets/qr-icebreaker.png"
+[[generated]]
+id = "2c25nN_5H2ygAQ9m04Gq-"
+uri = "file://artifacts/icebreaker-mobile/assets/images/icon.png"
 type = "image"
-title = "Icebreaker Dev QR Code"
+title = "icebreaker app icon"

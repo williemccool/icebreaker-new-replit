@@ -1,0 +1,311 @@
+Act as a world-class senior product QA lead, staff software engineer, growth product reviewer, and mobile UX auditor.
+
+You are reviewing my app called Icebreaker. This is not a superficial code review. I want a complete end-to-end product, feature, UX, logic, monetization, reliability, and bug-risk review of the app as it currently exists in this Replit project.
+
+Your task is to inspect the codebase, infer actual implemented behavior, compare it against intended product behavior, and produce a brutally honest, structured audit.
+
+IMPORTANT OPERATING RULES
+- Review the actual implemented app, not just naming or intent.
+- Trace flows through UI, components, routes, server/API handlers, DB logic, auth, payments, realtime logic, and state management.
+- Identify what is fully implemented, partially implemented, mocked, inconsistent, broken, risky, or missing.
+- Do not assume a feature works because UI exists.
+- If a flow depends on backend or DB schema, verify that.
+- If a flow depends on third-party services, configs, secrets, webhooks, or env vars, verify likely runtime viability.
+- Call out dead ends, placeholder logic, hardcoded values, fake/demo data, unhandled edge cases, and mismatches between UI copy and code behavior.
+- Prefer evidence from code paths and project structure.
+- Be extremely specific.
+
+PRODUCT CONTEXT FOR ICEBREAKER
+Icebreaker is a nightlife/social connection app centered around user-driven discovery, mutual interest, live venue context, live virtual rooms, gamified engagement, and AI-assisted conversation starting. It is intended to help users discover others in context and break the ice naturally. The product strategy and docs emphasize:
+- user-driven discovery instead of opaque algorithmic pairing
+- venue-based and event-based social interaction
+- live virtual rooms / group experiences
+- safety-conscious interactions
+- mutual-like / mutual-interest activation
+- icebreaker prompts and guided openers
+- monetization via payments and in-app economy
+- engagement systems like cubes, seasons, rewards, events, and premium surfaces
+- authentic connections bridging digital and real-world interaction
+
+For this review, focus especially on these core features:
+1. Venues
+2. Live virtual rooms
+3. Cubes economy
+4. Seasons / gamification / progression
+5. Payments
+6. Icebreaking scenario flow:
+   - each person gets 3 questions
+   - the system generates/selects reply styles or message options
+   - options include subtle, neutral, and flirty
+   - the flow should feel fun, safe, intentional, and actually usable
+
+YOUR DELIVERABLE MUST FOLLOW THIS EXACT STRUCTURE
+
+SECTION 1 — EXECUTIVE SUMMARY
+Provide:
+- overall product health score out of 10
+- launch readiness score out of 10
+- trust/safety readiness score out of 10
+- monetization readiness score out of 10
+- UX polish score out of 10
+- a concise verdict: “ship now”, “ship with fixes”, or “not ready”
+
+SECTION 2 — FEATURE IMPLEMENTATION MATRIX
+Create a table with these columns:
+- Feature
+- Intended Behavior
+- Observed Implementation
+- Status: Complete / Partial / Broken / Mocked / Missing
+- Severity
+- Notes
+
+Audit at least these areas:
+- onboarding
+- auth
+- profile creation and edit
+- discovery / browse
+- venue browsing
+- venue detail page
+- check-in or venue presence logic
+- live virtual rooms list
+- room joining
+- room participation state
+- cubes earning
+- cubes spending
+- wallet/balance tracking
+- seasons/progression
+- leaderboards or rankings if present
+- payment checkout
+- subscription/premium unlocks
+- in-app purchases or cubes purchase flows
+- mutual interest / connection logic
+- chat / messaging
+- icebreaker question flow
+- 3-question session logic
+- subtle / neutral / flirty generation or selection logic
+- notifications
+- moderation/safety/report/block
+- analytics/events tracking
+- admin/moderation surfaces if any
+
+SECTION 3 — DEEP REVIEW OF THE 6 MOST IMPORTANT SYSTEMS
+
+For each of the following, provide:
+- what exists
+- what works
+- what is risky
+- missing logic
+- likely bugs
+- UX problems
+- backend/data issues
+- security/abuse issues
+- recommendations
+
+A. VENUES
+Check for:
+- venue list, filtering, search, geolocation, maps, live occupancy, open/closed state, event overlays, check-in flows, venue-based discovery, venue profile quality, data source realism, broken empty states, CTA clarity, and whether venues actually influence social matching or room access.
+
+B. LIVE VIRTUAL ROOMS
+Check for:
+- room discovery, room states, presence, host/moderator logic, participant counts, join/leave reliability, stale rooms, dead rooms, audio/video/text assumptions, live updates, safety/reporting, prompts inside rooms, and transition from room to private interaction.
+
+C. CUBES ECONOMY
+Check for:
+- how cubes are awarded, spent, stored, displayed, reconciled, and protected
+- duplicate spend risk
+- balance desync risk
+- race conditions
+- test/mock balance data
+- whether cubes are connected to actual value
+- whether premium actions, gifts, boosts, room actions, or features consume cubes consistently
+- abuse vectors and economy exploits
+
+D. SEASONS / GAMIFICATION
+Check for:
+- season model, dates, resets, rewards, badge states, milestone logic, streaks, progress UI, leaderboard logic, anti-cheat assumptions, consistency between backend and UI, and whether this system is motivating or confusing.
+
+E. PAYMENTS
+Check for:
+- provider integration
+- product IDs / price IDs / config correctness
+- success/cancel handling
+- webhook dependency
+- entitlement updates
+- duplicate purchase handling
+- currency correctness
+- cube purchase linkage
+- subscriptions vs one-time purchases
+- receipt/state sync
+- failures and refunds handling
+- paywall clarity
+
+F. ICEBREAKING FLOW
+This is one of the highest priority areas.
+Inspect and verify the complete scenario:
+- how two users enter the flow
+- whether entry conditions are correct
+- whether both sides actually get 3 questions
+- whether question ordering is deterministic or randomized intentionally
+- whether each person sees the right prompts at the right time
+- whether the system creates or suggests message variants
+- whether subtle, neutral, and flirty are clearly implemented and meaningfully different
+- whether style selection influences actual sent/copied/generated content
+- whether content feels contextual, safe, and non-cringe
+- whether fallback behavior exists if generation fails
+- whether state is stored properly between steps
+- whether users can abandon and resume
+- whether there are edge case bugs if one user drops off
+- whether there is spam, abuse, or awkwardness risk
+- whether this feature is genuinely delightful or just conceptually good
+
+SECTION 4 — USER FLOW WALKTHROUGHS
+Simulate and describe the following journeys based on code and product behavior:
+1. New user signs up, creates profile, discovers a venue, enters venue context, and tries to meet people
+2. User joins a live virtual room and tries to convert that into a meaningful connection
+3. User earns cubes and tries to spend them
+4. User interacts with a season/progression system and understands rewards
+5. User attempts a purchase and expects premium benefits or cubes
+6. Two matched/interested users go through the 3-question icebreaker flow and choose subtle / neutral / flirty options
+
+For each journey, state:
+- happy path
+- confusing moments
+- friction points
+- missing UI feedback
+- likely drop-off moments
+- technical breakpoints
+
+SECTION 5 — LOGIC, STATE, AND DATA MODEL AUDIT
+Inspect the architecture and explain:
+- key routes/pages/screens
+- important shared components
+- client state approach
+- server/data layer approach
+- database schema or inferred schema
+- realtime/presence approach
+- payment state propagation
+- whether there are domain model inconsistencies
+
+Specifically identify:
+- duplicated business logic
+- fragile client-side-only rules
+- missing backend validation
+- places where UI and DB can diverge
+- race conditions
+- stale cache/state issues
+- optimistic UI risks
+- missing loading/error/empty states
+
+SECTION 6 — TRUST, SAFETY, AND ABUSE REVIEW
+Review:
+- reporting flows
+- block/mute functionality
+- content moderation
+- harassment/spam prevention
+- room abuse controls
+- fake profile risks
+- cube economy exploitation
+- payment abuse/refund loopholes
+- unsafe flirty-message generation risk
+- age/safety/compliance assumptions
+- venue safety considerations
+- private data leakage
+- location exposure risk
+
+Rate each issue as:
+- Critical
+- High
+- Medium
+- Low
+
+SECTION 7 — DESIGN AND UX AUDIT
+Review the app like a top-tier consumer social product reviewer.
+Inspect:
+- visual polish
+- clarity of primary actions
+- hierarchy
+- onboarding quality
+- copy quality
+- consistency of tone
+- empty states
+- animation/motion quality
+- perceived speed
+- emotional feel
+- whether the app feels exciting, safe, premium, and socially alive
+- whether venue, room, cubes, seasons, and payments feel like one coherent system or disconnected features
+
+Call out:
+- what feels premium
+- what feels generic
+- what feels confusing
+- what feels unfinished
+- exactly which screens need redesign first
+
+SECTION 8 — PRODUCTION READINESS CHECKLIST
+Create a yes/no checklist covering:
+- auth readiness
+- environment variable readiness
+- backend/API readiness
+- DB migration readiness
+- payment webhook readiness
+- error handling readiness
+- analytics readiness
+- crash logging readiness
+- moderation readiness
+- rate limiting readiness
+- security/privacy readiness
+- app store / launch readiness
+- seed/demo readiness
+
+SECTION 9 — TOP 25 ISSUES TO FIX BEFORE SERIOUS LAUNCH
+Rank the 25 most important issues by priority.
+For each issue provide:
+- title
+- impacted feature
+- severity
+- why it matters
+- exact recommendation
+- rough implementation difficulty: S / M / L
+
+SECTION 10 — FASTEST PATH TO “IMPRESSIVE DEMO” VS “REAL LAUNCH”
+Split recommendations into:
+A. fixes for an investor/demo-ready version in 3–7 days
+B. fixes for a real beta launch
+C. fixes for a scaled public launch
+
+SECTION 11 — FILES AND CODE AREAS TO REVIEW FIRST
+List the exact files, folders, modules, components, routes, schemas, services, hooks, and payment integrations that appear most important so I know where to focus immediately after your review.
+
+SECTION 12 — FINAL VERDICT
+Answer:
+- What is the strongest thing about this product right now?
+- What is the weakest thing?
+- Is the product differentiated enough?
+- Which one feature is most likely to impress users?
+- Which one feature is most likely to break trust?
+- If you were the product owner, what would you fix first this week?
+
+ADDITIONAL REVIEW HEURISTICS
+- Be skeptical of frontend-only completeness.
+- If there are mock APIs or placeholder data, call them out.
+- If the app claims realtime, verify likely realtime wiring.
+- If payments exist only visually, say so clearly.
+- If rooms or venues are not actually integrated into discovery, say so.
+- If cubes or seasons are cosmetic rather than systemic, say so.
+- If subtle / neutral / flirty are not actually backed by meaningful generation logic, say so.
+- If the 3-question flow is conceptually present but not operationally robust, say so.
+- Distinguish very clearly between:
+  - polished UI
+  - functional feature
+  - production-grade system
+
+OUTPUT QUALITY BAR
+Your output should read like a combination of:
+- senior engineer architecture audit
+- PM product readiness memo
+- mobile consumer app teardown
+- QA lead test report
+
+Be direct, specific, and evidence-based.
+Do not be polite if the product is weak.
+Do not give generic advice.

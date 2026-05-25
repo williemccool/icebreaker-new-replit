@@ -1,0 +1,14 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "Yi_MP34ltLbgqY309aEGR"
+uri = "file://ICEBREAKER_QA_AUDIT.md"
+type = "text"
+title = "Icebreaker App — Full Product & Engineering Audit"
+
+[[outputs]]
+id = "bevrPyWdgdiVoO7ImwOPP"
+uri = "file://attached_assets/qr-icebreaker.png"
+type = "image"
+title = "Icebreaker Dev QR Code"
