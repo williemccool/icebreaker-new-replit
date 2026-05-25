@@ -49,9 +49,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingBottom: 10 },
   backBtn: { width: 36, height: 36, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 18, fontWeight: "800" },
+  headerTitle: { fontSize: 18, fontFamily: "PlusJakartaSans_800ExtraBold" },
   card: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 16, borderWidth: 1 },
   iconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  cardTitle: { fontSize: 14, fontWeight: "700" },
-  cardDesc: { fontSize: 12, fontWeight: "500", marginTop: 2 },
+  cardTitle: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
+  cardDesc: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", marginTop: 2 },
 });

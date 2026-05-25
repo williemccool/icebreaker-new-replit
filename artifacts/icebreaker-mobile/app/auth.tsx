@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -18,14 +19,20 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useAuthContext } from "@/context/AuthContext";
 import { post } from "@/lib/api";
+import { useOAuth, useAuth } from "@clerk/clerk-expo";
+import * as WebBrowser from "expo-web-browser";
 
 const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signIn, exchangeClerkToken } = useAuthContext();
+  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const clerkAuth = useAuth();
 
   const [step, setStep] = useState<"welcome" | "phone" | "otp">("welcome");
   const [phone, setPhone] = useState("");
@@ -88,9 +95,11 @@ export default function AuthScreen() {
       >
         {/* Logo */}
         <View style={styles.logoContainer}>
-          <View style={[styles.logoCircle, { borderColor: colors.primary + "40" }]}>
-            <Feather name="heart" size={32} color={colors.primary} />
-          </View>
+          <Image
+            source={require("../assets/images/logo.png")}
+            style={{ width: 80, height: 80 }}
+            resizeMode="contain"
+          />
         </View>
 
         {step === "welcome" && (
@@ -189,13 +198,42 @@ export default function AuthScreen() {
             {!!CLERK_KEY && (
               <TouchableOpacity
                 style={[styles.ghostButton, { borderColor: colors.secondary + "60" }]}
-                onPress={() => {}}
+                onPress={async () => {
+                  try {
+                    setLoading(true);
+                    const { createdSessionId, setActive } = await startOAuthFlow();
+                    if (createdSessionId && setActive) {
+                      await setActive({ session: createdSessionId });
+                      // Get a JWT from Clerk and exchange it for our backend token
+                      const jwt = await clerkAuth.getToken();
+                      const ok = jwt ? await exchangeClerkToken(jwt) : false;
+                      if (ok) {
+                        router.replace("/");
+                      } else {
+                        Alert.alert("Login failed", "Could not exchange Clerk session.");
+                      }
+                    } else {
+                      Alert.alert("Google sign-in", "Sign-in was cancelled or failed.");
+                    }
+                  } catch (e: any) {
+                    Alert.alert("Google sign-in error", e?.message || "Something went wrong");
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
                 activeOpacity={0.8}
               >
-                <Feather name="globe" size={18} color={colors.secondary} />
-                <Text style={[styles.ghostButtonText, { color: colors.foreground }]}>
-                  Continue with Google
-                </Text>
+                {loading ? (
+                  <ActivityIndicator color={colors.secondary} />
+                ) : (
+                  <>
+                    <Feather name="globe" size={18} color={colors.secondary} />
+                    <Text style={[styles.ghostButtonText, { color: colors.foreground }]}>
+                      Continue with Google
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             )}
 
@@ -264,8 +302,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.04)",
   },
-  title: { fontSize: 32, fontWeight: "800", letterSpacing: -0.5, marginBottom: 6 },
-  subtitle: { fontSize: 15, textAlign: "center", marginBottom: 32 },
+  title: { fontSize: 32, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: -0.5, marginBottom: 6 },
+  subtitle: { fontSize: 15, fontFamily: "PlusJakartaSans_500Medium", textAlign: "center", marginBottom: 32 },
   input: {
     width: "100%",
     height: 56,
@@ -273,7 +311,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
     fontSize: 16,
-    fontWeight: "600",
+    fontFamily: "PlusJakartaSans_600SemiBold",
     marginTop: 8,
   },
   spacer: { flex: 1 },
@@ -287,7 +325,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  primaryButtonText: { color: "#FFF", fontSize: 16, fontWeight: "700" },
+  primaryButtonText: { color: "#FFF", fontSize: 16, fontFamily: "PlusJakartaSans_700Bold" },
   ghostButton: {
     width: "100%",
     height: 54,
@@ -300,10 +338,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: "rgba(255,255,255,0.04)",
   },
-  ghostButtonText: { fontSize: 16, fontWeight: "700" },
+  ghostButtonText: { fontSize: 16, fontFamily: "PlusJakartaSans_700Bold" },
   backLink: { marginTop: 8, padding: 8 },
-  backText: { fontSize: 14, fontWeight: "600" },
-  terms: { fontSize: 11, textAlign: "center", marginTop: 8, lineHeight: 16 },
+  backText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold" },
+  terms: { fontSize: 11, fontFamily: "PlusJakartaSans_400Regular", textAlign: "center", marginTop: 8, lineHeight: 16 },
   devBanner: {
     width: "100%",
     borderRadius: 16,
@@ -312,7 +350,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  devLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 2, marginBottom: 4 },
-  devCode: { fontSize: 22, fontWeight: "800", letterSpacing: 6 },
+  devLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 2, marginBottom: 4 },
+  devCode: { fontSize: 22, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 6 },
   devHint: { fontSize: 10, marginTop: 2 },
 });
