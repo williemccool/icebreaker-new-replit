@@ -388,17 +388,18 @@ export default function RoomScreen() {
                 </View>
               )}
 
-              {/* Dark gradient overlay via absolute view */}
-              <View style={styles.cardGradient} />
+              {/* Dark scrim — bottom 50% of the card so text is always readable */}
+              <View style={styles.cardScrim} />
 
-              {/* Prompt box */}
+              {/* Content overlay */}
               <View style={styles.cardOverlay}>
-                <View style={[styles.promptBox, { borderColor: colors.border }]}>
-                  <Text style={[styles.promptLabel, { color: colors.secondary }]}>{current.prompt}</Text>
-                  <Text style={[styles.promptAnswer, { color: colors.foreground }]}>{current.answer}</Text>
+                {/* Prompt box (top) */}
+                <View style={[styles.promptBox, { borderColor: "rgba(255,255,255,0.15)" }]}>
+                  <Text style={[styles.promptLabel, { color: "#00CFFF" }]}>{current.prompt}</Text>
+                  <Text style={[styles.promptAnswer, { color: "#FFF" }]}>{current.answer}</Text>
                 </View>
 
-                {/* Profile info + actions button */}
+                {/* Profile footer (bottom — sits on dark scrim so always readable) */}
                 <View style={styles.profileFooter}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.profileName}>
@@ -406,8 +407,8 @@ export default function RoomScreen() {
                     </Text>
                     {current.verified && (
                       <View style={styles.verifiedRow}>
-                        <Feather name="check-circle" size={12} color={colors.secondary} />
-                        <Text style={[styles.verifiedText, { color: colors.secondary }]}>Selfie-Verified</Text>
+                        <Feather name="check-circle" size={13} color="#00CFFF" />
+                        <Text style={[styles.verifiedText, { color: "#00CFFF" }]}>Selfie-Verified</Text>
                       </View>
                     )}
                   </View>
@@ -710,16 +711,18 @@ const styles = StyleSheet.create({
   },
   cardPhoto: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
   photoPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  cardGradient: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "transparent",
-    // Simulated gradient: dark at bottom, transparent at top
+  cardScrim: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: "60%",
+    backgroundColor: "rgba(0,0,0,0.65)",
   },
   cardOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
     padding: 16,
-    backgroundColor: "transparent",
   },
   promptBox: {
     padding: 12,

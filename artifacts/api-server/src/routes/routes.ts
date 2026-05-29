@@ -219,22 +219,23 @@ import type { Express, Request, Response, NextFunction } from "express";
   async function ensureDemoParticipants() {
     try {
       const SEEDS = [
-        { phone: "SEED_001", name: "Priya Sharma",   gender: "female", city: "Bangalore", bio: "Loves live music and rooftop sunsets", dob: new Date("1998-03-12") },
-        { phone: "SEED_002", name: "Aditya Rao",     gender: "male",   city: "Bangalore", bio: "Weekend trekker, foodie, startup nerd",  dob: new Date("1996-07-22") },
-        { phone: "SEED_003", name: "Nisha Verma",    gender: "female", city: "Bangalore", bio: "Dancing till 3am is self-care",          dob: new Date("2000-01-05") },
-        { phone: "SEED_004", name: "Karan Mehta",    gender: "male",   city: "Bangalore", bio: "Craft beer enthusiast, dog dad",          dob: new Date("1995-11-18") },
-        { phone: "SEED_005", name: "Ananya Iyer",    gender: "female", city: "Bangalore", bio: "Jazz, chai, and good conversation",       dob: new Date("1999-06-30") },
-        { phone: "SEED_006", name: "Rohan Das",      gender: "male",   city: "Bangalore", bio: "DJ by night, designer by day",            dob: new Date("1997-09-14") },
-        { phone: "SEED_007", name: "Meera Pillai",   gender: "female", city: "Bangalore", bio: "Reading, running, raving",                dob: new Date("2001-04-02") },
-        { phone: "SEED_008", name: "Vikram Singh",   gender: "male",   city: "Bangalore", bio: "Surfer catching Bengaluru vibes",          dob: new Date("1994-12-08") },
-        { phone: "SEED_009", name: "Divya Nair",     gender: "female", city: "Bangalore", bio: "Laugh loud, dream louder",                dob: new Date("1999-08-19") },
-        { phone: "SEED_010", name: "Arjun Bose",     gender: "male",   city: "Bangalore", bio: "Midnight snacks and long chats",          dob: new Date("1996-02-27") },
+        { phone: "SEED_001", name: "Priya Sharma",  gender: "female", city: "Bangalore", bio: "Loves live music and rooftop sunsets", dob: new Date("1998-03-12"), photos: ["https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&q=80"] },
+        { phone: "SEED_002", name: "Aditya Rao",    gender: "male",   city: "Bangalore", bio: "Weekend trekker, foodie, startup nerd", dob: new Date("1996-07-22"), photos: ["https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=600&q=80"] },
+        { phone: "SEED_003", name: "Nisha Verma",   gender: "female", city: "Bangalore", bio: "Dancing till 3am is self-care",         dob: new Date("2000-01-05"), photos: ["https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=600&q=80"] },
+        { phone: "SEED_004", name: "Karan Mehta",   gender: "male",   city: "Bangalore", bio: "Craft beer enthusiast, dog dad",         dob: new Date("1995-11-18"), photos: ["https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&q=80"] },
+        { phone: "SEED_005", name: "Ananya Iyer",   gender: "female", city: "Bangalore", bio: "Jazz, chai, and good conversation",      dob: new Date("1999-06-30"), photos: ["https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=600&q=80"] },
+        { phone: "SEED_006", name: "Rohan Das",     gender: "male",   city: "Bangalore", bio: "DJ by night, designer by day",           dob: new Date("1997-09-14"), photos: ["https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&q=80"] },
+        { phone: "SEED_007", name: "Meera Pillai",  gender: "female", city: "Bangalore", bio: "Reading, running, raving",               dob: new Date("2001-04-02"), photos: ["https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=600&q=80"] },
+        { phone: "SEED_008", name: "Vikram Singh",  gender: "male",   city: "Bangalore", bio: "Surfer catching Bengaluru vibes",         dob: new Date("1994-12-08"), photos: ["https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&q=80"] },
+        { phone: "SEED_009", name: "Divya Nair",    gender: "female", city: "Bangalore", bio: "Laugh loud, dream louder",               dob: new Date("1999-08-19"), photos: ["https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=600&q=80"] },
+        { phone: "SEED_010", name: "Arjun Bose",    gender: "male",   city: "Bangalore", bio: "Midnight snacks and long chats",          dob: new Date("1996-02-27"), photos: ["https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=600&q=80"] },
       ] as const;
 
       const seedIds: number[] = [];
       for (const seed of SEEDS) {
         const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.phone, seed.phone)).limit(1);
         if (existing) {
+          await db.update(users).set({ photos: seed.photos, verified: true }).where(eq(users.id, existing.id));
           seedIds.push(existing.id);
         } else {
           const [created] = await db.insert(users).values({
@@ -245,6 +246,7 @@ import type { Express, Request, Response, NextFunction } from "express";
             bio: seed.bio,
             dob: seed.dob,
             verified: true,
+            photos: seed.photos,
           }).returning({ id: users.id });
           await db.insert(cubeWallets).values({ userId: created.id, balance: 150 });
           await db.insert(preferences).values({ userId: created.id });
