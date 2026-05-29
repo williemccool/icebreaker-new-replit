@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
 import { get } from "@/lib/api";
@@ -21,9 +21,15 @@ function GenderBar({ room }: { room: any }) {
   return (
     <View>
       <View style={styles.genderRow}>
-        <Text style={[styles.genderLabel, { color: "#FF1B8D" }]}>♀ {femPct}%</Text>
+        <View style={styles.genderTag}>
+          <Ionicons name="female" size={11} color="#FF1B8D" />
+          <Text style={[styles.genderLabel, { color: "#FF1B8D" }]}>{femPct}%</Text>
+        </View>
         <Text style={styles.genderMixed}>MIXED</Text>
-        <Text style={[styles.genderLabel, { color: "#00CFFF" }]}>{100 - femPct}% ♂</Text>
+        <View style={styles.genderTag}>
+          <Text style={[styles.genderLabel, { color: "#00CFFF" }]}>{100 - femPct}%</Text>
+          <Ionicons name="male" size={11} color="#00CFFF" />
+        </View>
       </View>
       <View style={styles.genderBar}>
         <View style={[styles.genderFill, { width: `${femPct}%` as any, backgroundColor: "#FF1B8D" }]} />
@@ -142,7 +148,7 @@ export default function RoomsScreen() {
                     </View>
                     <View style={styles.xpBadge}>
                       <Feather name="zap" size={9} color="#FFB000" />
-                      <Text style={styles.xpText}>2×XP</Text>
+                      <Text style={styles.xpText}>2x XP</Text>
                     </View>
                     {item.premium && (
                       <View style={styles.crownBadge}>
@@ -201,8 +207,9 @@ export default function RoomsScreen() {
                   >
                     <Feather name="radio" size={16} color={isFull ? "#8A8FA8" : "#FFF"} />
                     <Text style={[styles.joinText, isFull && { color: "#8A8FA8" }]}>
-                      {isFull ? "Room Full" : "Join Room →"}
+                      {isFull ? "Room Full" : "Join Room"}
                     </Text>
+                    {!isFull && <Feather name="arrow-right" size={16} color="#FFF" />}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -297,6 +304,7 @@ const styles = StyleSheet.create({
   statText: { fontSize: 11, fontFamily: "PlusJakartaSans_600SemiBold", color: "#8A8FA8" },
   fillingFast: { fontSize: 10, fontFamily: "PlusJakartaSans_800ExtraBold", color: "#FF1B8D" },
   genderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 5 },
+  genderTag: { flexDirection: "row", alignItems: "center", gap: 3 },
   genderLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_800ExtraBold" },
   genderMixed: { fontSize: 10, fontFamily: "PlusJakartaSans_700Bold", color: "#8A8FA8" },
   genderBar: { flexDirection: "row", height: 5, borderRadius: 3, overflow: "hidden" },
