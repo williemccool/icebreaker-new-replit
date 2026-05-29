@@ -68,7 +68,7 @@ export default function RoomScreen() {
 
   const reportMutation = useMutation({
     mutationFn: (reportedUserId: number) =>
-      post("/api/reports", { reportedUserId, reason: "Reported from live room" }),
+      post("/api/reports", { reportedUserId, contentType: "user", reason: "Reported from live room" }),
     onSuccess: () => Alert.alert("Reported", "Thanks — our team will review within 24h."),
   });
 
