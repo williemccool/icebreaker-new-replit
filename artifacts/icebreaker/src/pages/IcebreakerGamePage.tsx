@@ -1,17 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Sparkles, Send, Loader2, MessageCircle } from "lucide-react";
+import { ArrowLeft, Sparkles, Send, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import {
-  pickPackForMatch,
-  pickOtherTone,
-  TONES,
-  TONE_COLOR,
-  TONE_LABEL,
-  type Tone,
-} from "@/data/icebreakerPacks";
+import { getPackById, TONES, TONE_COLOR, TONE_LABEL, type Tone, type Pack } from "@/data/icebreakerPacks";
 
 const AVATARS = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
@@ -19,26 +12,46 @@ const AVATARS = [
   "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&q=80",
 ];
 
-type Stage = "turn1" | "typing" | "turn2_reveal" | "turn3" | "submitting" | "done";
-
-const TURN_LABEL: Record<number, string> = {
-  1: "Your move",
-  2: "Their reply",
-  3: "Your reply",
+type IceTurn = { turn: number; tone: Tone; senderId: number; body: string; mine: boolean };
+type IceState = {
+  status: "not_started" | "in_progress" | "completed";
+  packId: string | null;
+  initiatorId: number | null;
+  currentTurn: number | null;
+  currentTurnUserId: number | null;
+  yourTurn: boolean;
+  isInitiator: boolean | null;
+  turns: IceTurn[];
+  otherUser: { id: number; name: string; photos: string[]; verified: boolean } | null;
 };
+
+// The tone options the current player should choose from, given the path so far.
+function optionsForTurn(pack: Pack | null, turn: number, turns: IceTurn[]): Record<Tone, string> | null {
+  if (!pack) return null;
+  if (turn === 1) return pack.turn1_options;
+  if (turn === 2) {
+    const t1 = turns[0]?.tone;
+    return t1 ? pack.turn2_options[t1] : null;
+  }
+  if (turn === 3) {
+    const t2 = turns[1]?.tone;
+    return t2 ? pack.turn3_options[t2] : null;
+  }
+  return null;
+}
 
 export default function IcebreakerGamePage() {
   const { matchId } = useParams<{ matchId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
-  const [stage, setStage] = useState<Stage>("turn1");
-  const [turn1Tone, setTurn1Tone] = useState<Tone | null>(null);
-  const [turn2Tone, setTurn2Tone] = useState<Tone | null>(null);
-  const [turn3Tone, setTurn3Tone] = useState<Tone | null>(null);
-
+  const [picked, setPicked] = useState<Tone | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
+  const me = JSON.parse(localStorage.getItem("user") || "{}");
+  const myPhoto = (me.photos as string[])?.[0] || AVATARS[0];
+
+  // Light match query just for the header (venue + age that the icebreaker state omits).
   const { data: matchData } = useQuery({
     queryKey: [`/api/matches/${matchId}`],
     queryFn: async () => {
@@ -49,82 +62,90 @@ export default function IcebreakerGamePage() {
     enabled: !!matchId,
   });
 
-  const otherUser = matchData?.otherUser;
+  // The authoritative turn-based icebreaker state. Polls while waiting on the other player.
+  const { data: state } = useQuery<IceState>({
+    queryKey: [`/api/matches/${matchId}/icebreaker`],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/matches/${matchId}/icebreaker`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load icebreaker");
+      return res.json();
+    },
+    enabled: !!matchId,
+    refetchInterval: (query) => {
+      const s = query.state.data as IceState | undefined;
+      if (!s || s.status === "completed") return false;
+      return s.yourTurn ? false : 2500;
+    },
+  });
+
+  const submit = useMutation({
+    mutationFn: async (tone: Tone) => {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/matches/${matchId}/icebreaker-turn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ tone, packId: state?.packId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 409) throw new Error(data?.error || "Failed to submit turn");
+      return data as IceState;
+    },
+    onSuccess: (newState) => {
+      setPicked(null);
+      if (newState && newState.status) {
+        queryClient.setQueryData([`/api/matches/${matchId}/icebreaker`], newState);
+      }
+      queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}/icebreaker`] });
+      if (newState?.status === "completed") {
+        queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}/messages`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      }
+    },
+    onError: () => {
+      toast({ title: "Couldn't send your turn", description: "Please try again.", variant: "destructive" });
+    },
+  });
+
+  const otherFromMatch = matchData?.otherUser;
   const match = matchData?.match;
-  const me = JSON.parse(localStorage.getItem("user") || "{}");
-  const myName = me.name?.split(" ")[0] || "You";
-  const myPhoto = (me.photos as string[])?.[0] || AVATARS[0];
-  const otherName = otherUser?.name?.split(" ")[0] || "Alex";
-  const otherAge = otherUser?.dob
-    ? Math.floor((Date.now() - new Date(otherUser.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-    : 24;
-  const otherPhoto = (otherUser?.photos as string[])?.[0] || AVATARS[(otherUser?.id || 1) % AVATARS.length];
+  const otherName = (state?.otherUser?.name || otherFromMatch?.name || "Alex").split(" ")[0];
+  const otherAge = otherFromMatch?.dob
+    ? Math.floor((Date.now() - new Date(otherFromMatch.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+    : null;
+  const otherPhoto =
+    (state?.otherUser?.photos as string[])?.[0] ||
+    (otherFromMatch?.photos as string[])?.[0] ||
+    AVATARS[(state?.otherUser?.id || 1) % AVATARS.length];
   const venueName = match?.venueName || "the venue";
 
-  const pack = useMemo(
-    () => pickPackForMatch(matchId || "0", match?.venueType || match?.venueName),
-    [matchId, match?.venueType, match?.venueName]
-  );
-
-  // Derived texts for the current path
-  const turn1Text = turn1Tone ? pack.turn1_options[turn1Tone] : null;
-  const turn2Text = turn1Tone && turn2Tone ? pack.turn2_options[turn1Tone][turn2Tone] : null;
-  const turn3Text =
-    turn1Tone && turn2Tone && turn3Tone ? pack.turn3_options[turn2Tone][turn3Tone] : null;
-
-  // When user picks turn1, kick off the typing animation, then deterministically pick turn2 for "them".
-  useEffect(() => {
-    if (stage !== "typing" || !turn1Tone) return;
-    const t = setTimeout(() => {
-      const tt = pickOtherTone(matchId || "0", 2, turn1Tone);
-      setTurn2Tone(tt);
-      setStage("turn2_reveal");
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [stage, turn1Tone, matchId]);
+  const pack = useMemo(() => (state?.packId ? getPackById(state.packId) : null), [state?.packId]);
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [stage, turn1Tone, turn2Tone, turn3Tone]);
+  }, [state?.turns?.length, state?.yourTurn]);
 
-  const handlePickTurn1 = (t: Tone) => {
-    setTurn1Tone(t);
-    setStage("typing");
-  };
+  // Route to chat once the icebreaker is complete.
+  useEffect(() => {
+    if (state?.status !== "completed") return;
+    const t = setTimeout(() => navigate(`/chat/${matchId}`), 1200);
+    return () => clearTimeout(t);
+  }, [state?.status, matchId, navigate]);
 
-  const handleContinueToTurn3 = () => setStage("turn3");
-
-  const handleSubmit = async () => {
-    if (!turn1Tone || !turn2Tone || !turn3Tone) return;
-    setStage("submitting");
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`/api/matches/${matchId}/icebreaker-conversation`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ packId: pack.id, turn1Tone, turn3Tone }),
-      });
-      if (!res.ok) {
-        if (res.status === 409) {
-          await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}/messages`] });
-          navigate(`/chat/${matchId}`);
-          return;
-        }
-        throw new Error("Failed to save conversation");
-      }
-      await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}`] });
-      await queryClient.invalidateQueries({ queryKey: [`/api/matches/${matchId}/messages`] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
-      setStage("done");
-      setTimeout(() => navigate(`/chat/${matchId}`), 1000);
-    } catch {
-      toast({ title: "Couldn't save the chat", description: "Please try again.", variant: "destructive" });
-      setStage("turn3");
-    }
-  };
+  // ============ LOADING ============
+  if (!state || !pack) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0A0A0C" }}>
+        <Loader2 className="w-6 h-6 animate-spin text-icebreaker-coral" />
+      </div>
+    );
+  }
 
   // ============ DONE STATE ============
-  if (stage === "done") {
+  if (state.status === "completed") {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: "#0A0A0C" }}>
         <div className="text-center">
@@ -136,14 +157,15 @@ export default function IcebreakerGamePage() {
     );
   }
 
-  // Which turn are we on?
-  const currentTurn = stage === "turn1" ? 1 : stage === "typing" || stage === "turn2_reveal" ? 2 : 3;
-  const accent =
-    stage === "turn3"
-      ? TONE_COLOR[turn3Tone || "flirty"]
-      : turn1Tone
-      ? TONE_COLOR[turn1Tone]
-      : "#FF1B8D";
+  const currentTurn = state.currentTurn ?? 3;
+  const lastTurnTone = state.turns[state.turns.length - 1]?.tone;
+  const accent = picked
+    ? TONE_COLOR[picked]
+    : lastTurnTone
+    ? TONE_COLOR[lastTurnTone]
+    : "#FF1B8D";
+  const options = optionsForTurn(pack, currentTurn, state.turns);
+  const isFinalTurn = currentTurn === 3;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "#0A0A0C" }}>
@@ -161,7 +183,9 @@ export default function IcebreakerGamePage() {
           <img src={otherPhoto} alt={otherName} className="w-9 h-9 rounded-full object-cover" />
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-sm">{otherName}, {otherAge}</span>
+              <span className="font-extrabold text-sm">
+                {otherName}{otherAge ? `, ${otherAge}` : ""}
+              </span>
               <span className="text-icebreaker-coral text-xs">⚡</span>
             </div>
             <div className="flex items-center gap-1">
@@ -181,8 +205,7 @@ export default function IcebreakerGamePage() {
             style={{ width: `${((currentTurn - 1) / 2) * 100}%`, background: accent }}
           />
           {[1, 2, 3].map((n) => {
-            const isComplete =
-              (n === 1 && currentTurn > 1) || (n === 2 && stage === "turn3");
+            const isComplete = n < currentTurn;
             const isCurrent = n === currentTurn;
             const isPending = !isComplete && !isCurrent;
             const c = isPending ? "#252530" : accent;
@@ -198,13 +221,13 @@ export default function IcebreakerGamePage() {
           })}
         </div>
         <p className="text-center text-[10px] text-icebreaker-muted font-bold tracking-widest mt-2">
-          {pack.round_title.toUpperCase()} · TURN {currentTurn}/3 · {TURN_LABEL[currentTurn].toUpperCase()}
+          {pack.round_title.toUpperCase()} · TURN {currentTurn}/3 · {state.yourTurn ? "YOUR MOVE" : `${otherName.toUpperCase()}'S MOVE`}
         </p>
       </div>
 
       {/* ============ CONVERSATION THREAD ============ */}
       <div className="px-5 pb-2 space-y-2">
-        {/* Turn 0: screen prompt always shown as a hint bubble at the top */}
+        {/* Screen prompt hint bubble */}
         <div
           className="rounded-2xl px-4 py-3 mx-auto max-w-[85%] text-center"
           style={{ background: "rgba(255,27,141,0.06)", border: "1px solid rgba(255,27,141,0.25)" }}
@@ -218,13 +241,20 @@ export default function IcebreakerGamePage() {
           <p className="text-[13px] font-semibold text-white leading-snug">{pack.screen_prompt}</p>
         </div>
 
-        {/* Turn 1 bubble (you) */}
-        {turn1Text && (
-          <ChatBubble side="me" photo={myPhoto} text={turn1Text} tone={turn1Tone!} />
-        )}
+        {/* Played turns */}
+        {state.turns.map((t) => (
+          <ChatBubble
+            key={t.turn}
+            side={t.mine ? "me" : "them"}
+            photo={t.mine ? myPhoto : otherPhoto}
+            text={t.body}
+            tone={t.tone}
+            name={t.mine ? undefined : otherName}
+          />
+        ))}
 
-        {/* Typing indicator for Turn 2 */}
-        {stage === "typing" && (
+        {/* Typing indicator while waiting on the other player */}
+        {!state.yourTurn && state.status === "in_progress" && (
           <div className="flex items-end gap-2 max-w-[80%]">
             <img src={otherPhoto} alt="" className="w-7 h-7 rounded-full object-cover" />
             <div
@@ -241,80 +271,56 @@ export default function IcebreakerGamePage() {
           </div>
         )}
 
-        {/* Turn 2 bubble (them) */}
-        {turn2Text && (
-          <ChatBubble side="them" photo={otherPhoto} text={turn2Text} tone={turn2Tone!} name={otherName} />
-        )}
-
-        {/* Turn 3 bubble (you) */}
-        {turn3Text && (
-          <ChatBubble side="me" photo={myPhoto} text={turn3Text} tone={turn3Tone!} />
-        )}
-
         <div ref={threadEndRef} />
       </div>
 
-      {/* ============ STAGE-SPECIFIC ACTIONS ============ */}
+      {/* ============ ACTIONS ============ */}
       <div className="flex-1 flex flex-col justify-end px-5 pb-6">
-        {stage === "turn1" && (
-          <ToneOptions
-            label={`Pick how you want to open with ${otherName} — your message goes to them.`}
-            options={pack.turn1_options}
-            onPick={handlePickTurn1}
-            picked={null}
-            testidPrefix="turn1"
-          />
-        )}
-
-        {stage === "turn2_reveal" && (
-          <div className="space-y-3">
-            <p className="text-center text-[12px] text-icebreaker-muted">
-              {otherName} went <span className="font-extrabold" style={{ color: TONE_COLOR[turn2Tone!] }}>{TONE_LABEL[turn2Tone!].toLowerCase()}</span>. Your turn to reply.
-            </p>
-            <button
-              onClick={handleContinueToTurn3}
-              className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2"
-              style={{
-                background: `linear-gradient(135deg, ${TONE_COLOR[turn2Tone!]}, ${TONE_COLOR[turn2Tone!]}cc)`,
-                boxShadow: `0 4px 20px ${TONE_COLOR[turn2Tone!]}66`,
-              }}
-              data-testid="button-continue-to-turn3"
-            >
-              <MessageCircle className="w-4 h-4" /> Pick your reply
-            </button>
-          </div>
-        )}
-
-        {stage === "turn3" && (
+        {state.yourTurn && options ? (
           <div className="space-y-3">
             <ToneOptions
-              label="This becomes your conversation closer — and unlocks the chat."
-              options={pack.turn3_options[turn2Tone!]}
-              onPick={(t) => setTurn3Tone(t)}
-              picked={turn3Tone}
-              testidPrefix="turn3"
+              label={
+                currentTurn === 1
+                  ? `Pick how you want to open with ${otherName} — your message goes to them.`
+                  : isFinalTurn
+                  ? "This becomes your conversation closer — and unlocks the chat."
+                  : `Reply to ${otherName} — choose your tone.`
+              }
+              options={options}
+              onPick={(t) => setPicked(t)}
+              picked={picked}
+              testidPrefix={`turn${currentTurn}`}
             />
             <button
-              onClick={handleSubmit}
-              disabled={!turn3Tone}
+              onClick={() => picked && submit.mutate(picked)}
+              disabled={!picked || submit.isPending}
               className="w-full py-3.5 rounded-2xl font-extrabold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-60"
               style={{
-                background: turn3Tone
-                  ? `linear-gradient(135deg, ${TONE_COLOR[turn3Tone]}, ${TONE_COLOR[turn3Tone]}cc)`
+                background: picked
+                  ? `linear-gradient(135deg, ${TONE_COLOR[picked]}, ${TONE_COLOR[picked]}cc)`
                   : "#252530",
-                boxShadow: turn3Tone ? `0 4px 20px ${TONE_COLOR[turn3Tone]}66` : "none",
+                boxShadow: picked ? `0 4px 20px ${TONE_COLOR[picked]}66` : "none",
               }}
-              data-testid="button-send-and-unlock"
+              data-testid="button-send-turn"
             >
-              <Send className="w-4 h-4" /> Send & unlock chat
+              {submit.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Sending…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" /> {isFinalTurn ? "Send & unlock chat" : "Send reply"}
+                </>
+              )}
             </button>
           </div>
-        )}
-
-        {stage === "submitting" && (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-5 h-5 animate-spin text-icebreaker-coral" />
-            <span className="ml-2 text-sm text-icebreaker-muted">Saving your conversation…</span>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-6 text-center">
+            <Loader2 className="w-5 h-5 animate-spin text-icebreaker-coral mb-2" />
+            <p className="text-sm font-bold text-white">Waiting for {otherName}…</p>
+            <p className="text-[12px] text-icebreaker-muted mt-1">
+              We'll let you know the moment {otherName} takes their turn.
+            </p>
           </div>
         )}
       </div>

@@ -29,6 +29,7 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
     interests: jsonb("interests").default([]),
     photos: jsonb("photos").default([]),
     verified: boolean("verified").default(false),
+    isBot: boolean("is_bot").default(true),
     selfieHash: text("selfie_hash"),
     passwordHash: text("password_hash"),
     swipesUsedToday: integer("swipes_used_today").default(0),

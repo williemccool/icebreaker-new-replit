@@ -10,7 +10,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     reports, blocks, paymentOrders,
     insertReportSchema, insertBlockSchema
   } from "@workspace/db";
-  import { getPackById, pickOtherTone, renderRoundPath, validateIcebreakerRound } from "../icebreakerPacks";
+  import { getPackById, pickOtherTone, pickPackForMatch } from "../icebreakerPacks";
   import { eq, and, or, desc, sql, gte, lte, lt, isNull, ne, notInArray, inArray } from "drizzle-orm";
   import bcrypt from "bcryptjs";
   import jwt from "jsonwebtoken";
@@ -540,14 +540,15 @@ import type { Express, Request, Response, NextFunction } from "express";
         const isNewUser = !user;
         
         if (!user) {
-          // Create new user
+          // Create new user. A user who authenticates is a real player, not a bot.
           [user] = await db.insert(users).values({
             phone,
             name: "",
             dob: new Date(),
             gender: "male",
             city: "",
-            verified: false
+            verified: false,
+            isBot: false
           }).returning();
           
           // Create wallet and preferences
@@ -559,6 +560,10 @@ import type { Express, Request, Response, NextFunction } from "express";
           await db.insert(preferences).values({
             userId: user.id
           });
+        } else if (user.isBot) {
+          // Existing profile just authenticated for the first time — promote to a real player.
+          await db.update(users).set({ isBot: false }).where(eq(users.id, user.id));
+          user = { ...user, isBot: false };
         }
         
         const token = jwt.sign({ userId: user.id }, JWT_SECRET);
@@ -626,6 +631,10 @@ import type { Express, Request, Response, NextFunction } from "express";
             if (!user.clerkUserId) {
               await db.update(users).set({ clerkUserId }).where(eq(users.id, user.id));
             }
+            if (user.isBot) {
+              await db.update(users).set({ isBot: false }).where(eq(users.id, user.id));
+              user = { ...user, isBot: false };
+            }
           }
         }
 
@@ -641,6 +650,7 @@ import type { Express, Request, Response, NextFunction } from "express";
               city: "",
               photos: photo ? [photo] : [],
               verified: false,
+              isBot: false,
             }).returning();
             await db.insert(cubeWallets).values({ userId: user.id, balance: 100 });
             await db.insert(preferences).values({ userId: user.id });
@@ -1407,23 +1417,126 @@ import type { Express, Request, Response, NextFunction } from "express";
       }
     });
     
-    // Atomic 3-turn icebreaker conversation. Client submits only the pack id and its
-    // two tone picks; the server resolves the conversation text from the canonical pack
-    // and derives Person 2's reply tone deterministically. This prevents clients from
-    // forging messages attributed to the other user.
-    app.post("/api/matches/:id/icebreaker-conversation", authMiddleware, async (req: any, res) => {
+    // ===================== TURN-BASED ICEBREAKER =====================
+    // The icebreaker is a true async, 3-turn exchange between the two matched users:
+    //   Turn 1 → initiator picks a tone (their opener)
+    //   Turn 2 → the OTHER user picks a tone (their reply, branched off turn 1)
+    //   Turn 3 → the initiator picks a closing tone (branched off turn 2)
+    // Chat unlocks only after turn 3. Each turn is stored as a message whose meta
+    // carries { icebreaker, turn, tone, packId }, so the conversation state is fully
+    // derivable from the messages table — no extra schema needed.
+    //
+    // Demo/seed profiles (users.isBot = true) never open the app, so the server
+    // auto-plays their turn (deterministically) to keep the flow moving. A profile
+    // stops being a bot the moment a real person authenticates into it.
+    const VALID_TONES = ["flirty", "subtle", "neutral"] as const;
+
+    async function userIsBot(tx: any, userId: number): Promise<boolean> {
+      const [u] = await tx.select({ isBot: users.isBot }).from(users).where(eq(users.id, userId)).limit(1);
+      return u?.isBot === true;
+    }
+
+    // Pull only the icebreaker messages for a match, ordered by turn.
+    function extractIcebreakerTurns(allMsgs: any[]) {
+      return allMsgs
+        .filter((m) => m?.meta && (m.meta as any).icebreaker === true)
+        .sort((a, b) => ((a.meta as any).turn || 0) - ((b.meta as any).turn || 0));
+    }
+
+    // Resolve the canonical message body for a given turn + tone path.
+    function resolveTurnBody(pack: any, turn: number, tones: { t1?: string; t2?: string; t3?: string }) {
+      if (turn === 1) return pack.turn1_options[tones.t1!];
+      if (turn === 2) return pack.turn2_options[tones.t1!][tones.t2!];
+      return pack.turn3_options[tones.t2!][tones.t3!];
+    }
+
+    // Who is responsible for a given turn? Turn 1 & 3 = initiator, Turn 2 = the other user.
+    function playerForTurn(turn: number, initiatorId: number | null, userAId: number, userBId: number): number | null {
+      if (initiatorId == null) return turn === 1 ? null : null;
+      if (turn === 1 || turn === 3) return initiatorId;
+      return initiatorId === userAId ? userBId : userAId;
+    }
+
+    // Build the public state object the clients render from.
+    function buildIcebreakerState(match: any, iceTurns: any[], viewerId: number, packId: string | null, otherUser: any) {
+      const initiatorId = iceTurns[0]?.senderId ?? null;
+      const completed = match.icebreakerCompleted || iceTurns.length >= 3;
+      const currentTurn = completed ? null : iceTurns.length + 1;
+      let currentTurnUserId: number | null = null;
+      if (currentTurn != null) {
+        currentTurnUserId =
+          currentTurn === 1 ? null : playerForTurn(currentTurn, initiatorId, match.userAId, match.userBId);
+      }
+      // On turn 1 (not started) anyone may start, so it's the viewer's turn.
+      const yourTurn = completed ? false : currentTurn === 1 ? true : currentTurnUserId === viewerId;
+      return {
+        status: completed ? "completed" : iceTurns.length === 0 ? "not_started" : "in_progress",
+        packId,
+        initiatorId,
+        currentTurn,
+        currentTurnUserId,
+        yourTurn,
+        isInitiator: initiatorId != null ? initiatorId === viewerId : null,
+        turns: iceTurns.map((m) => ({
+          turn: (m.meta as any).turn,
+          tone: (m.meta as any).tone,
+          senderId: m.senderId,
+          body: m.body,
+          mine: m.senderId === viewerId,
+        })),
+        otherUser,
+      };
+    }
+
+    // GET current icebreaker state for a match.
+    app.get("/api/matches/:id/icebreaker", authMiddleware, async (req: any, res) => {
       try {
         const matchId = parseInt(req.params.id);
-        const { packId, turn1Tone, turn3Tone } = req.body || {};
-        const validTones = ["flirty", "subtle", "neutral"];
-        if (typeof packId !== "string" || !validTones.includes(turn1Tone) || !validTones.includes(turn3Tone)) {
-          res.status(400).json({ error: "packId, turn1Tone, turn3Tone required" }); return;
+        const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+        if (!match) { res.status(404).json({ error: "Match not found" }); return; }
+        if (match.userAId !== req.userId && match.userBId !== req.userId) {
+          res.status(403).json({ error: "Not authorized" }); return;
         }
-        const pack = getPackById(packId);
-        if (!pack) { res.status(400).json({ error: "Unknown packId" }); return; }
+        const otherId = match.userAId === req.userId ? match.userBId : match.userAId;
+        const [otherUser] = await db.select({
+          id: users.id, name: users.name, photos: users.photos, verified: users.verified,
+        }).from(users).where(eq(users.id, otherId)).limit(1);
+
+        const allMsgs = await db.select().from(messages).where(eq(messages.matchId, matchId));
+        const iceTurns = extractIcebreakerTurns(allMsgs);
+
+        // packId: stored on turn 1 once started, otherwise computed deterministically so
+        // the client can render turn-1 options before anyone has committed.
+        let packId: string | null = iceTurns[0]?.meta?.packId ?? null;
+        if (!packId) {
+          let venueName: string | undefined;
+          if (match.venueId) {
+            const [venue] = await db.select({ name: venues.name }).from(venues).where(eq(venues.id, match.venueId)).limit(1);
+            venueName = venue?.name ?? undefined;
+          }
+          packId = pickPackForMatch(String(matchId), venueName).id;
+        }
+
+        res.json(buildIcebreakerState(match, iceTurns, req.userId, packId, otherUser));
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Submit the caller's tone pick for whatever turn is currently theirs. The server
+    // derives the turn from existing state (prevents forging/duplicate turns), resolves
+    // the canonical body, then auto-plays any subsequent bot turn(s).
+    app.post("/api/matches/:id/icebreaker-turn", authMiddleware, async (req: any, res) => {
+      try {
+        const matchId = parseInt(req.params.id);
+        const { tone } = req.body || {};
+        if (!VALID_TONES.includes(tone)) {
+          res.status(400).json({ error: "Valid tone required" }); return;
+        }
 
         const result = await db.transaction(async (tx) => {
-          const [match] = await tx.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+          // Lock the match row so concurrent turn submissions serialize.
+          const [match] = await tx.select().from(matches).where(eq(matches.id, matchId)).for("update").limit(1);
           if (!match) return { code: 404, body: { error: "Match not found" } };
           if (match.userAId !== req.userId && match.userBId !== req.userId) {
             return { code: 403, body: { error: "Not authorized" } };
@@ -1431,31 +1544,83 @@ import type { Express, Request, Response, NextFunction } from "express";
           if (match.icebreakerCompleted) {
             return { code: 409, body: { error: "Icebreaker already completed" } };
           }
+
+          const allMsgs = await tx.select().from(messages).where(eq(messages.matchId, matchId));
+          let iceTurns = extractIcebreakerTurns(allMsgs);
+          const nextTurn = iceTurns.length + 1;
+          if (nextTurn > 3) return { code: 409, body: { error: "Icebreaker already completed" } };
+
+          const initiatorId = iceTurns[0]?.senderId ?? null;
+          const expectedPlayer = nextTurn === 1 ? req.userId : playerForTurn(nextTurn, initiatorId, match.userAId, match.userBId);
+          if (expectedPlayer !== req.userId) {
+            return { code: 403, body: { error: "Not your turn" } };
+          }
+
+          // Determine the pack. Once started, it's locked to turn 1's pack. For a fresh
+          // game the server picks the canonical pack deterministically (ignoring any
+          // client-provided packId) so both players always see the same pack.
+          let packId: string | undefined = iceTurns[0]?.meta?.packId;
+          if (!packId) {
+            let venueName: string | undefined;
+            if (match.venueId) {
+              const [venue] = await tx.select({ name: venues.name }).from(venues).where(eq(venues.id, match.venueId)).limit(1);
+              venueName = venue?.name ?? undefined;
+            }
+            packId = pickPackForMatch(String(matchId), venueName).id;
+          }
+          const pack = getPackById(packId);
+          if (!pack) return { code: 400, body: { error: "Unknown packId" } };
+
+          // Track the tone path so far, then add the human's pick for this turn.
+          const tones: { t1?: string; t2?: string; t3?: string } = {
+            t1: iceTurns[0]?.meta?.tone,
+            t2: iceTurns[1]?.meta?.tone,
+          };
+          if (nextTurn === 1) tones.t1 = tone;
+          if (nextTurn === 2) tones.t2 = tone;
+          if (nextTurn === 3) tones.t3 = tone;
+
+          // Insert the human's turn.
+          const humanBody = resolveTurnBody(pack, nextTurn, tones);
+          await tx.insert(messages).values({
+            matchId, senderId: req.userId, body: humanBody,
+            meta: { icebreaker: true, turn: nextTurn, packId, tone },
+          });
+
+          // Auto-play any following bot turns until it's a human's turn or we're done.
+          let played = nextTurn;
+          const finalInitiatorId = initiatorId ?? req.userId; // turn 1 just set the initiator
+          while (played < 3) {
+            const upcoming = played + 1;
+            const upcomingPlayer = playerForTurn(upcoming, finalInitiatorId, match.userAId, match.userBId)!;
+            if (!(await userIsBot(tx, upcomingPlayer))) break;
+            const botTone = upcoming === 2
+              ? pickOtherTone(String(matchId), 2, tones.t1 as any)
+              : pickOtherTone(String(matchId), 3, tones.t2 as any);
+            if (upcoming === 2) tones.t2 = botTone;
+            if (upcoming === 3) tones.t3 = botTone;
+            const botBody = resolveTurnBody(pack, upcoming, tones);
+            await tx.insert(messages).values({
+              matchId, senderId: upcomingPlayer, body: botBody,
+              meta: { icebreaker: true, turn: upcoming, packId, tone: botTone },
+            });
+            played = upcoming;
+          }
+
+          // If all three turns now exist, unlock the chat.
+          if (played >= 3) {
+            await tx.update(matches).set({ icebreakerCompleted: true }).where(eq(matches.id, matchId));
+          }
+
+          // Re-read for an authoritative response.
+          const refreshed = await tx.select().from(messages).where(eq(messages.matchId, matchId));
+          const [freshMatch] = await tx.select().from(matches).where(eq(matches.id, matchId)).limit(1);
           const otherId = match.userAId === req.userId ? match.userBId : match.userAId;
-          const turn2Tone = pickOtherTone(String(matchId), 2, turn1Tone);
-          const round = renderRoundPath(pack, turn1Tone, turn2Tone);
-          if (!validateIcebreakerRound(round)) {
-            return { code: 500, body: { error: "Pack failed validation" } };
-          }
-          const turn1Body = pack.turn1_options[turn1Tone as keyof typeof pack.turn1_options];
-          const turn2Body = pack.turn2_options[turn1Tone as keyof typeof pack.turn2_options][turn2Tone];
-          const turn3Body = pack.turn3_options[turn2Tone][turn3Tone as keyof typeof pack.turn1_options];
-
-          // Compare-and-set: only the first concurrent winner flips the flag.
-          const claimed = await tx.update(matches)
-            .set({ icebreakerCompleted: true })
-            .where(and(eq(matches.id, matchId), eq(matches.icebreakerCompleted, false)))
-            .returning();
-          if (claimed.length === 0) {
-            return { code: 409, body: { error: "Icebreaker already completed" } };
-          }
-
-          const inserted = await tx.insert(messages).values([
-            { matchId, senderId: req.userId, body: turn1Body, meta: { icebreaker: true, turn: 1, packId, tone: turn1Tone } },
-            { matchId, senderId: otherId, body: turn2Body, meta: { icebreaker: true, turn: 2, packId, tone: turn2Tone } },
-            { matchId, senderId: req.userId, body: turn3Body, meta: { icebreaker: true, turn: 3, packId, tone: turn3Tone } },
-          ]).returning();
-          return { code: 200, body: { messages: inserted, turn2Tone } };
+          const [otherUser] = await tx.select({
+            id: users.id, name: users.name, photos: users.photos, verified: users.verified,
+          }).from(users).where(eq(users.id, otherId)).limit(1);
+          const state = buildIcebreakerState(freshMatch, extractIcebreakerTurns(refreshed), req.userId, packId, otherUser);
+          return { code: 200, body: state };
         });
 
         res.status(result.code).json(result.body); return;
@@ -1463,10 +1628,6 @@ import type { Express, Request, Response, NextFunction } from "express";
         res.status(500).json({ error: error.message });
       }
     });
-
-    // (Removed) PATCH /api/matches/:id/icebreaker — completion is only granted
-    // through POST /api/matches/:id/icebreaker-conversation so the canonical
-    // 3-message conversation always exists when chat is unlocked.
 
     // Get user matches
     app.get("/api/matches", authMiddleware, async (req: any, res) => {

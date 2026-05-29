@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -15,17 +15,42 @@ import { useColors } from "@/hooks/useColors";
 import { get, post } from "@/lib/api";
 import * as Haptics from "expo-haptics";
 import {
-  PACKS,
   TONES,
   TONE_COLOR,
   TONE_LABEL,
   TONE_EMOJI,
-  pickPackForMatch,
-  pickOtherTone,
+  getPackById,
   type Tone,
+  type Pack,
 } from "@/lib/icebreakerPacks";
 
-type Stage = "turn1" | "typing" | "turn2_reveal" | "turn3" | "submitting" | "done";
+type IceTurn = { turn: number; tone: Tone; senderId: number; body: string; mine: boolean };
+type IceState = {
+  status: "not_started" | "in_progress" | "completed";
+  packId: string | null;
+  initiatorId: number | null;
+  currentTurn: number | null;
+  currentTurnUserId: number | null;
+  yourTurn: boolean;
+  isInitiator: boolean | null;
+  turns: IceTurn[];
+  otherUser: { id: number; name: string; photos: string[]; verified: boolean } | null;
+};
+
+// The tone options the current player should choose from, given the path so far.
+function optionsForTurn(pack: Pack | null, turn: number, turns: IceTurn[]): Record<Tone, string> | null {
+  if (!pack) return null;
+  if (turn === 1) return pack.turn1_options;
+  if (turn === 2) {
+    const t1 = turns[0]?.tone;
+    return t1 ? pack.turn2_options[t1] : null;
+  }
+  if (turn === 3) {
+    const t2 = turns[1]?.tone;
+    return t2 ? pack.turn3_options[t2] : null;
+  }
+  return null;
+}
 
 export default function GameScreen() {
   const colors = useColors();
@@ -35,77 +60,66 @@ export default function GameScreen() {
   const matchId = Number(id);
   const qc = useQueryClient();
 
-  const [stage, setStage] = useState<Stage>("turn1");
-  const [turn1Tone, setTurn1Tone] = useState<Tone | null>(null);
-  const [turn2Tone, setTurn2Tone] = useState<Tone | null>(null);
-  const [turn3Tone, setTurn3Tone] = useState<Tone | null>(null);
+  const [picked, setPicked] = useState<Tone | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const { data: matchData, isLoading } = useQuery({
+  // Light match query for the header name (icebreaker state also carries otherUser as fallback).
+  const { data: matchData } = useQuery({
     queryKey: ["match", matchId],
     queryFn: () => get(`/api/matches/${matchId}`),
     enabled: !!matchId,
   });
 
-  const otherUser = matchData?.otherUser;
-  const match = matchData?.match;
-  const otherName = (otherUser?.name as string)?.split(" ")[0] || "them";
-
-  const pack = useMemo(
-    () => pickPackForMatch(matchId || 0, match?.venueName),
-    [matchId, match?.venueName]
-  );
-
-  const turn1Text = turn1Tone ? pack.turn1_options[turn1Tone] : null;
-  const turn2Text = turn1Tone && turn2Tone ? pack.turn2_options[turn1Tone][turn2Tone] : null;
-  const turn3Text = turn2Tone && turn3Tone ? pack.turn3_options[turn2Tone][turn3Tone] : null;
-
-  // After user picks turn 1, simulate "typing" then reveal person 2's reply
-  useEffect(() => {
-    if (stage !== "typing" || !turn1Tone) return;
-    const t = setTimeout(() => {
-      const tt = pickOtherTone(matchId, 2, turn1Tone);
-      setTurn2Tone(tt);
-      setStage("turn2_reveal");
-    }, 1400);
-    return () => clearTimeout(t);
-  }, [stage, turn1Tone, matchId]);
-
-  const submitMutation = useMutation({
-    mutationFn: () =>
-      post(`/api/matches/${matchId}/icebreaker-conversation`, {
-        packId: pack.id,
-        turn1Tone,
-        turn3Tone,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["match", matchId] });
-      qc.invalidateQueries({ queryKey: ["matches"] });
-      setStage("done");
-    },
-    onError: () => {
-      setStage("turn3");
+  // Authoritative turn-based icebreaker state. Polls while waiting on the other player.
+  const { data: state, isLoading } = useQuery<IceState>({
+    queryKey: ["icebreaker", matchId],
+    queryFn: () => get(`/api/matches/${matchId}/icebreaker`),
+    enabled: !!matchId,
+    refetchInterval: (query) => {
+      const s = query.state.data as IceState | undefined;
+      if (!s || s.status === "completed") return false;
+      return s.yourTurn ? false : 2500;
     },
   });
 
-  const handlePickTurn1 = (t: Tone) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTurn1Tone(t);
-    setStage("typing");
-  };
+  const submitMutation = useMutation({
+    mutationFn: (tone: Tone) =>
+      post<IceState>(`/api/matches/${matchId}/icebreaker-turn`, { tone, packId: state?.packId }),
+    onSuccess: (newState) => {
+      setPicked(null);
+      if (newState && newState.status) {
+        qc.setQueryData(["icebreaker", matchId], newState);
+      }
+      qc.invalidateQueries({ queryKey: ["icebreaker", matchId] });
+      if (newState?.status === "completed") {
+        qc.invalidateQueries({ queryKey: ["match", matchId] });
+        qc.invalidateQueries({ queryKey: ["matches"] });
+      }
+    },
+  });
 
-  const handlePickTurn3 = (t: Tone) => {
+  const otherName =
+    ((state?.otherUser?.name || (matchData?.otherUser?.name as string)) || "them").split(" ")[0];
+
+  const pack = useMemo(() => (state?.packId ? getPackById(state.packId) ?? null : null), [state?.packId]);
+
+  useEffect(() => {
+    const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    return () => clearTimeout(t);
+  }, [state?.turns?.length, state?.yourTurn]);
+
+  const handlePick = (t: Tone) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setTurn3Tone(t);
+    setPicked(t);
   };
 
   const handleSubmit = () => {
-    if (!turn1Tone || !turn3Tone) return;
+    if (!picked) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setStage("submitting");
-    submitMutation.mutate();
+    submitMutation.mutate(picked);
   };
 
-  if (isLoading) {
+  if (isLoading || !state || !pack) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 40 }]}>
         <ActivityIndicator color={colors.primary} />
@@ -113,8 +127,8 @@ export default function GameScreen() {
     );
   }
 
-  // Already completed — show unlock state
-  if (stage === "done" || matchData?.match?.icebreakerCompleted) {
+  // ============ DONE STATE ============
+  if (state.status === "completed") {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 8 }]}>
         <View style={styles.doneBody}>
@@ -137,9 +151,12 @@ export default function GameScreen() {
     );
   }
 
-  const currentTurn = stage === "turn1" ? 1 : stage === "typing" || stage === "turn2_reveal" ? 2 : 3;
-  const accentTone = stage === "turn3" ? (turn3Tone || turn1Tone || "flirty") : (turn1Tone || "flirty");
+  const currentTurn = state.currentTurn ?? 3;
+  const lastTone = state.turns[state.turns.length - 1]?.tone;
+  const accentTone: Tone = picked || lastTone || "flirty";
   const accent = TONE_COLOR[accentTone];
+  const options = optionsForTurn(pack, currentTurn, state.turns);
+  const isFinalTurn = currentTurn === 3;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -169,7 +186,7 @@ export default function GameScreen() {
         </View>
         <View style={styles.progressDots}>
           {[1, 2, 3].map((n) => {
-            const done = (n === 1 && currentTurn > 1) || (n === 2 && currentTurn > 2);
+            const done = n < currentTurn;
             const active = n === currentTurn;
             return (
               <View
@@ -189,11 +206,12 @@ export default function GameScreen() {
           })}
         </View>
         <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>
-          Turn {currentTurn} of 3 · {currentTurn === 1 ? "Your move" : currentTurn === 2 ? "Their reply" : "Your reply"}
+          Turn {currentTurn} of 3 · {state.yourTurn ? "Your move" : `${otherName}'s move`}
         </Text>
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -204,18 +222,29 @@ export default function GameScreen() {
           <Text style={[styles.promptBannerText, { color: colors.foreground }]}>{pack.screen_prompt}</Text>
         </View>
 
-        {/* Turn 1 bubble */}
-        {turn1Text && (
-          <View style={styles.bubbleRowRight}>
-            <View style={[styles.bubble, { backgroundColor: TONE_COLOR[turn1Tone!], shadowColor: TONE_COLOR[turn1Tone!] }]}>
-              <Text style={styles.bubbleToneLabel}>{TONE_EMOJI[turn1Tone!]} {TONE_LABEL[turn1Tone!]}</Text>
-              <Text style={styles.bubbleText}>{turn1Text}</Text>
+        {/* Played turns */}
+        {state.turns.map((t) =>
+          t.mine ? (
+            <View key={t.turn} style={styles.bubbleRowRight}>
+              <View style={[styles.bubble, { backgroundColor: TONE_COLOR[t.tone], shadowColor: TONE_COLOR[t.tone] }]}>
+                <Text style={styles.bubbleToneLabel}>{TONE_EMOJI[t.tone]} {TONE_LABEL[t.tone]}</Text>
+                <Text style={styles.bubbleText}>{t.body}</Text>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View key={t.turn} style={styles.bubbleRowLeft}>
+              <View style={[styles.bubble, styles.bubbleThem, { borderColor: TONE_COLOR[t.tone] + "55" }]}>
+                <Text style={[styles.bubbleToneLabel, { color: TONE_COLOR[t.tone] }]}>
+                  {TONE_EMOJI[t.tone]} {otherName} · {TONE_LABEL[t.tone]}
+                </Text>
+                <Text style={[styles.bubbleText, { color: "#FFF" }]}>{t.body}</Text>
+              </View>
+            </View>
+          )
         )}
 
-        {/* Typing indicator */}
-        {stage === "typing" && (
+        {/* Typing indicator while waiting on the other player */}
+        {!state.yourTurn && state.status === "in_progress" && (
           <View style={styles.bubbleRowLeft}>
             <View style={[styles.bubble, styles.bubbleThem]}>
               <View style={styles.typingDots}>
@@ -226,111 +255,56 @@ export default function GameScreen() {
             </View>
           </View>
         )}
-
-        {/* Turn 2 bubble (their reply) */}
-        {turn2Text && (
-          <View style={styles.bubbleRowLeft}>
-            <View style={[styles.bubble, styles.bubbleThem, { borderColor: TONE_COLOR[turn2Tone!] + "55" }]}>
-              <Text style={[styles.bubbleToneLabel, { color: TONE_COLOR[turn2Tone!] }]}>
-                {TONE_EMOJI[turn2Tone!]} {otherName} · {TONE_LABEL[turn2Tone!]}
-              </Text>
-              <Text style={[styles.bubbleText, { color: "#FFF" }]}>{turn2Text}</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Turn 3 bubble (your chosen reply) */}
-        {turn3Text && turn3Tone && (
-          <View style={styles.bubbleRowRight}>
-            <View style={[styles.bubble, { backgroundColor: TONE_COLOR[turn3Tone], shadowColor: TONE_COLOR[turn3Tone] }]}>
-              <Text style={styles.bubbleToneLabel}>{TONE_EMOJI[turn3Tone]} {TONE_LABEL[turn3Tone]}</Text>
-              <Text style={styles.bubbleText}>{turn3Text}</Text>
-            </View>
-          </View>
-        )}
       </ScrollView>
 
       {/* Bottom actions */}
       <View style={[styles.bottomPanel, { paddingBottom: insets.bottom + 12, borderTopColor: colors.border }]}>
-        {/* Turn 1: pick your opening tone */}
-        {stage === "turn1" && (
+        {state.yourTurn && options ? (
           <View style={styles.toneSection}>
             <Text style={[styles.tonePrompt, { color: colors.mutedForeground }]}>
-              Pick how you want to open with {otherName}
+              {currentTurn === 1
+                ? `Pick how you want to open with ${otherName}`
+                : isFinalTurn
+                ? `This unlocks your chat with ${otherName}`
+                : `Reply to ${otherName} — choose your tone`}
             </Text>
             {TONES.map((t) => (
               <ToneCard
                 key={t}
                 tone={t}
-                text={pack.turn1_options[t]}
-                selected={turn1Tone === t}
-                onPress={() => handlePickTurn1(t)}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Turn 2 reveal: tell user what tone their match used, let them proceed */}
-        {stage === "turn2_reveal" && turn2Tone && (
-          <View style={styles.revealSection}>
-            <Text style={[styles.revealText, { color: colors.mutedForeground }]}>
-              {otherName} went{" "}
-              <Text style={{ color: TONE_COLOR[turn2Tone], fontFamily: "PlusJakartaSans_700Bold" }}>
-                {TONE_LABEL[turn2Tone]}
-              </Text>
-              . Your turn to reply.
-            </Text>
-            <TouchableOpacity
-              style={[styles.continueBtn, { backgroundColor: TONE_COLOR[turn2Tone] }]}
-              onPress={() => setStage("turn3")}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.continueBtnText}>Pick your reply →</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Turn 3: pick reply tone */}
-        {stage === "turn3" && turn2Tone && (
-          <View style={styles.toneSection}>
-            <Text style={[styles.tonePrompt, { color: colors.mutedForeground }]}>
-              This unlocks your chat with {otherName}
-            </Text>
-            {TONES.map((t) => (
-              <ToneCard
-                key={t}
-                tone={t}
-                text={pack.turn3_options[turn2Tone][t]}
-                selected={turn3Tone === t}
-                onPress={() => handlePickTurn3(t)}
+                text={options[t]}
+                selected={picked === t}
+                onPress={() => handlePick(t)}
               />
             ))}
             <TouchableOpacity
               style={[
                 styles.sendBtn,
                 {
-                  backgroundColor: turn3Tone ? colors.primary : "rgba(255,255,255,0.06)",
-                  opacity: turn3Tone ? 1 : 0.5,
+                  backgroundColor: picked ? colors.primary : "rgba(255,255,255,0.06)",
+                  opacity: picked && !submitMutation.isPending ? 1 : 0.5,
                 },
               ]}
               onPress={handleSubmit}
-              disabled={!turn3Tone}
+              disabled={!picked || submitMutation.isPending}
               activeOpacity={0.8}
             >
-              <Feather name="send" size={16} color={turn3Tone ? "#FFF" : colors.mutedForeground} style={{ marginRight: 8 }} />
-              <Text style={[styles.sendBtnText, { color: turn3Tone ? "#FFF" : colors.mutedForeground }]}>
-                Send & unlock chat
+              {submitMutation.isPending ? (
+                <ActivityIndicator color="#FFF" size="small" style={{ marginRight: 8 }} />
+              ) : (
+                <Feather name="send" size={16} color={picked ? "#FFF" : colors.mutedForeground} style={{ marginRight: 8 }} />
+              )}
+              <Text style={[styles.sendBtnText, { color: picked ? "#FFF" : colors.mutedForeground }]}>
+                {isFinalTurn ? "Send & unlock chat" : "Send reply"}
               </Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* Submitting */}
-        {stage === "submitting" && (
-          <View style={styles.submittingRow}>
+        ) : (
+          <View style={styles.waitingSection}>
             <ActivityIndicator color={colors.primary} size="small" />
-            <Text style={[styles.submittingText, { color: colors.mutedForeground }]}>
-              Saving your conversation…
+            <Text style={[styles.waitingTitle, { color: colors.foreground }]}>Waiting for {otherName}…</Text>
+            <Text style={[styles.waitingSub, { color: colors.mutedForeground }]}>
+              We'll update the moment {otherName} takes their turn.
             </Text>
           </View>
         )}
@@ -478,15 +452,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   toneText: { fontSize: 13, fontFamily: "PlusJakartaSans_500Medium", flex: 1, lineHeight: 18 },
-  revealSection: { gap: 12 },
-  revealText: { fontSize: 13, fontFamily: "PlusJakartaSans_500Medium", textAlign: "center" },
-  continueBtn: {
-    height: 50,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  continueBtnText: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold", color: "#FFF" },
   sendBtn: {
     height: 52,
     borderRadius: 16,
@@ -496,8 +461,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   sendBtnText: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold" },
-  submittingRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16 },
-  submittingText: { fontSize: 14, fontFamily: "PlusJakartaSans_500Medium" },
+  waitingSection: { alignItems: "center", justifyContent: "center", paddingVertical: 18, gap: 8 },
+  waitingTitle: { fontSize: 15, fontFamily: "PlusJakartaSans_700Bold" },
+  waitingSub: { fontSize: 12, fontFamily: "PlusJakartaSans_500Medium", textAlign: "center" },
   doneBody: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30, gap: 16 },
   doneIcon: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
   doneTitle: { fontSize: 24, fontFamily: "PlusJakartaSans_800ExtraBold" },
