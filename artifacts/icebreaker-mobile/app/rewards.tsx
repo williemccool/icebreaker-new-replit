@@ -45,10 +45,18 @@ export default function RewardsScreen() {
             <View style={[styles.balanceIcon, { backgroundColor: colors.primary }]}>
               <Feather name="zap" size={24} color="#FFF" />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.balanceLabel, { color: colors.mutedForeground }]}>CUBE BALANCE</Text>
               <Text style={[styles.balanceValue, { color: colors.foreground }]}>{balance}</Text>
             </View>
+            <TouchableOpacity
+              style={[styles.topUpBtn, { backgroundColor: colors.primary }]}
+              onPress={() => router.push("/shop?tab=cubes" as any)}
+              activeOpacity={0.85}
+            >
+              <Feather name="plus" size={14} color="#FFF" />
+              <Text style={styles.topUpText}>Get Cubes</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -56,6 +64,7 @@ export default function RewardsScreen() {
         <TouchableOpacity
           style={[styles.premiumCard, { borderColor: isPremium ? colors.primary + "50" : colors.border }]}
           activeOpacity={0.8}
+          onPress={() => router.push("/shop?tab=godmode" as any)}
         >
           <View style={styles.premiumRow}>
             <View style={[styles.premiumIcon, { backgroundColor: colors.primary }]}>
@@ -76,7 +85,11 @@ export default function RewardsScreen() {
         </TouchableOpacity>
 
         {/* Season Pass */}
-        <View style={[styles.seasonCard, { borderColor: colors.secondary + "30" }]}>
+        <TouchableOpacity
+          style={[styles.seasonCard, { borderColor: colors.secondary + "30" }]}
+          activeOpacity={0.8}
+          onPress={() => router.push("/shop?tab=season" as any)}
+        >
           <View style={styles.seasonRow}>
             <Feather name="calendar" size={20} color={colors.secondary} />
             <View style={{ flex: 1, marginLeft: 10 }}>
@@ -85,8 +98,9 @@ export default function RewardsScreen() {
                 {season?.season?.name || "Current Season"}
               </Text>
             </View>
+            <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
           </View>
-        </View>
+        </TouchableOpacity>
 
         {/* Quests */}
         <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>QUESTS</Text>
@@ -121,6 +135,8 @@ const styles = StyleSheet.create({
   balanceIcon: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   balanceLabel: { fontSize: 10, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 1.2 },
   balanceValue: { fontSize: 32, fontFamily: "PlusJakartaSans_800ExtraBold", marginTop: 2 },
+  topUpBtn: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12 },
+  topUpText: { color: "#FFF", fontSize: 13, fontFamily: "PlusJakartaSans_800ExtraBold" },
   premiumCard: { borderRadius: 18, borderWidth: 1, padding: 14 },
   premiumRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   premiumIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },

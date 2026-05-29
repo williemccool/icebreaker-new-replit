@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
 import { get, post } from "@/lib/api";
@@ -243,7 +243,10 @@ export default function RoomScreen() {
 
             {/* Entry status */}
             <View style={[styles.entryStatusCard, { borderColor: colors.border }]}>
-              <Text style={[styles.sectionLabel, { color: colors.primary }]}>✦ YOUR ENTRY STATUS</Text>
+              <View style={styles.sectionLabelRow}>
+                <Feather name="star" size={12} color={colors.primary} />
+                <Text style={[styles.sectionLabel, { color: colors.primary }]}>YOUR ENTRY STATUS</Text>
+              </View>
               <View style={styles.entryRow}>
                 <View style={[styles.entryIconWrap, { backgroundColor: "rgba(255,27,141,0.2)" }]}>
                   <Feather name="star" size={16} color="#FF1B8D" />
@@ -258,7 +261,7 @@ export default function RoomScreen() {
               </View>
               <View style={[styles.entryRowDim, { borderColor: colors.border }]}>
                 <View style={[styles.entryIconWrap, { backgroundColor: "rgba(0,207,255,0.1)" }]}>
-                  <Text style={{ color: "#00CFFF", fontFamily: "PlusJakartaSans_700Bold" }}>♂</Text>
+                  <Ionicons name="male" size={16} color="#00CFFF" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.entryRowTitle, { color: colors.foreground, opacity: 0.6 }]}>40 Cubes</Text>
@@ -284,7 +287,10 @@ export default function RoomScreen() {
 
             {/* Safety */}
             <View style={[styles.safetyCard, { borderColor: "rgba(0,207,255,0.2)" }]}>
-              <Text style={[styles.sectionLabel, { color: "#00CFFF" }]}>🛡 SAFETY FIRST</Text>
+              <View style={styles.sectionLabelRow}>
+                <Feather name="shield" size={12} color="#00CFFF" />
+                <Text style={[styles.sectionLabel, { color: "#00CFFF" }]}>SAFETY FIRST</Text>
+              </View>
               {["No screenshots allowed inside the room.", "Respect boundaries. No means no.", "Comfort Mode applies here."].map((item) => (
                 <Text key={item} style={[styles.safetyItem, { color: colors.mutedForeground }]}>• {item}</Text>
               ))}
@@ -416,7 +422,7 @@ export default function RoomScreen() {
                     style={styles.moreBtn}
                     onPress={() => setActionsOpen(true)}
                   >
-                    <Text style={styles.moreText}>⋯</Text>
+                    <Feather name="more-horizontal" size={18} color={colors.mutedForeground} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -575,6 +581,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionLabel: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 1.2 },
+  sectionLabelRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 8 },
   entryRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -747,7 +754,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 2,
   },
-  moreText: { color: "#FFF", fontSize: 18, lineHeight: 20 },
   dotsRow: { flexDirection: "row", gap: 4 },
   actions: { flexDirection: "row", gap: 24, marginTop: 4 },
   passBtn: {

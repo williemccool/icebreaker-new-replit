@@ -11,17 +11,17 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
 import { get, post } from "@/lib/api";
 import * as Haptics from "expo-haptics";
 
 const DRINKS = [
-  { key: "beer",     label: "Beer",     sub: "Pint / Bottle",    cubes: 150, icon: "🍺", accent: "#FF1B8D" },
-  { key: "cocktail", label: "Cocktail", sub: "Signature Mix",    cubes: 250, icon: "🍹", accent: "#FF1B8D" },
-  { key: "mocktail", label: "Mocktail", sub: "Alcohol-Free",     cubes: 100, icon: "🧃", accent: "#00CFFF" },
-  { key: "coffee",   label: "Coffee",   sub: "Hot or Iced",      cubes: 80,  icon: "☕", accent: "#00CFFF" },
+  { key: "beer",     label: "Beer",     sub: "Pint / Bottle",    cubes: 150, icon: "beer", accent: "#FF1B8D" },
+  { key: "cocktail", label: "Cocktail", sub: "Signature Mix",    cubes: 250, icon: "glass-cocktail", accent: "#FF1B8D" },
+  { key: "mocktail", label: "Mocktail", sub: "Alcohol-Free",     cubes: 100, icon: "cup", accent: "#00CFFF" },
+  { key: "coffee",   label: "Coffee",   sub: "Hot or Iced",      cubes: 80,  icon: "coffee", accent: "#00CFFF" },
 ];
 
 export default function GiftDrinkScreen() {
@@ -91,7 +91,7 @@ export default function GiftDrinkScreen() {
           <View style={[styles.voucherCard, { borderColor: colors.primary + "60" }]}>
             {/* Top section */}
             <View style={[styles.voucherTop, { backgroundColor: colors.primary + "10" }]}>
-              <Text style={styles.voucherEmoji}>{drink.icon}</Text>
+              <MaterialCommunityIcons name={drink.icon as any} size={48} color={drink.accent} style={styles.voucherEmoji} />
               <View style={[styles.voucherLabel, { borderColor: colors.primary + "40" }]}>
                 <Text style={[styles.voucherLabelText, { color: colors.primary }]}>DRINK VOUCHER</Text>
               </View>
@@ -203,7 +203,7 @@ export default function GiftDrinkScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={styles.drinkEmoji}>{d.icon}</Text>
+              <MaterialCommunityIcons name={d.icon as any} size={24} color={d.accent} style={styles.drinkEmoji} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.drinkLabel, { color: colors.foreground }]}>{d.label}</Text>
                 <Text style={[styles.drinkSub, { color: colors.mutedForeground }]}>{d.sub}</Text>
@@ -262,7 +262,7 @@ export default function GiftDrinkScreen() {
             <ActivityIndicator color="#FFF" />
           ) : (
             <>
-              <Text style={[styles.sendBtnEmoji]}>{drink.icon}</Text>
+              <MaterialCommunityIcons name={drink.icon as any} size={20} color="#FFF" style={styles.sendBtnEmoji} />
               <Text style={[styles.sendBtnText, !canAfford && { color: "#8A8FA8" }]}>
                 {canAfford
                   ? `Gift ${drink.label} · ${drink.cubes} cubes`

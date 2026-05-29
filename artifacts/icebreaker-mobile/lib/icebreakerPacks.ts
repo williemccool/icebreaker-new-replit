@@ -25,12 +25,6 @@ export const TONE_LABEL: Record<Tone, string> = {
   neutral: "Neutral",
 };
 
-export const TONE_EMOJI: Record<Tone, string> = {
-  flirty: "💗",
-  subtle: "✨",
-  neutral: "😊",
-};
-
 export const PACKS: Pack[] = [
   {
     id: "blr_rooftop_v2",

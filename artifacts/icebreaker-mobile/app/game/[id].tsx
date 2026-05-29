@@ -18,11 +18,16 @@ import {
   TONES,
   TONE_COLOR,
   TONE_LABEL,
-  TONE_EMOJI,
   getPackById,
   type Tone,
   type Pack,
 } from "@/lib/icebreakerPacks";
+
+const TONE_ICON: Record<Tone, keyof typeof Feather.glyphMap> = {
+  flirty: "heart",
+  subtle: "star",
+  neutral: "smile",
+};
 
 type IceTurn = { turn: number; tone: Tone; senderId: number; body: string; mine: boolean };
 type IceState = {
@@ -144,7 +149,8 @@ export default function GameScreen() {
             onPress={() => router.replace(`/chat/${matchId}` as any)}
             activeOpacity={0.8}
           >
-            <Text style={styles.doneBtnText}>Open Chat →</Text>
+            <Text style={styles.doneBtnText}>Open Chat</Text>
+            <Feather name="arrow-right" size={16} color="#FFF" style={{ marginLeft: 8 }} />
           </TouchableOpacity>
         </View>
       </View>
@@ -218,7 +224,10 @@ export default function GameScreen() {
       >
         {/* Screen prompt */}
         <View style={[styles.promptBanner, { borderColor: "rgba(255,27,141,0.25)", backgroundColor: "rgba(255,27,141,0.06)" }]}>
-          <Text style={[styles.promptBannerLabel, { color: colors.primary }]}>✦ Conversation Prompt</Text>
+          <View style={styles.promptBannerLabelRow}>
+            <Feather name="star" size={12} color={colors.primary} />
+            <Text style={[styles.promptBannerLabel, { color: colors.primary }]}>Conversation Prompt</Text>
+          </View>
           <Text style={[styles.promptBannerText, { color: colors.foreground }]}>{pack.screen_prompt}</Text>
         </View>
 
@@ -227,16 +236,22 @@ export default function GameScreen() {
           t.mine ? (
             <View key={t.turn} style={styles.bubbleRowRight}>
               <View style={[styles.bubble, { backgroundColor: TONE_COLOR[t.tone], shadowColor: TONE_COLOR[t.tone] }]}>
-                <Text style={styles.bubbleToneLabel}>{TONE_EMOJI[t.tone]} {TONE_LABEL[t.tone]}</Text>
+                <View style={styles.bubbleToneRow}>
+                  <Feather name={TONE_ICON[t.tone]} size={11} color="rgba(255,255,255,0.95)" />
+                  <Text style={styles.bubbleToneLabel}>{TONE_LABEL[t.tone]}</Text>
+                </View>
                 <Text style={styles.bubbleText}>{t.body}</Text>
               </View>
             </View>
           ) : (
             <View key={t.turn} style={styles.bubbleRowLeft}>
               <View style={[styles.bubble, styles.bubbleThem, { borderColor: TONE_COLOR[t.tone] + "55" }]}>
-                <Text style={[styles.bubbleToneLabel, { color: TONE_COLOR[t.tone] }]}>
-                  {TONE_EMOJI[t.tone]} {otherName} · {TONE_LABEL[t.tone]}
-                </Text>
+                <View style={styles.bubbleToneRow}>
+                  <Feather name={TONE_ICON[t.tone]} size={11} color={TONE_COLOR[t.tone]} />
+                  <Text style={[styles.bubbleToneLabel, { color: TONE_COLOR[t.tone] }]}>
+                    {otherName} · {TONE_LABEL[t.tone]}
+                  </Text>
+                </View>
                 <Text style={[styles.bubbleText, { color: "#FFF" }]}>{t.body}</Text>
               </View>
             </View>
@@ -337,7 +352,7 @@ function ToneCard({
       activeOpacity={0.8}
     >
       <View style={[styles.toneBadge, { backgroundColor: c }]}>
-        <Text style={styles.toneEmoji}>{TONE_EMOJI[tone]}</Text>
+        <Feather name={TONE_ICON[tone]} size={14} color="#FFF" />
         <Text style={styles.toneBadgeLabel}>{TONE_LABEL[tone].slice(0, 3).toUpperCase()}</Text>
       </View>
       <Text style={[styles.toneText, { color: selected ? "#FFF" : "rgba(255,255,255,0.85)" }]}>{text}</Text>
@@ -386,11 +401,11 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 4,
   },
+  promptBannerLabelRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 6 },
   promptBannerLabel: {
     fontSize: 10,
     fontFamily: "PlusJakartaSans_700Bold",
     letterSpacing: 1,
-    marginBottom: 6,
   },
   promptBannerText: { fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold", lineHeight: 20 },
   bubbleRowRight: { flexDirection: "row", justifyContent: "flex-end" },
@@ -411,11 +426,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
+  bubbleToneRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 5 },
   bubbleToneLabel: {
     fontSize: 10,
     fontFamily: "PlusJakartaSans_700Bold",
     color: "rgba(255,255,255,0.75)",
-    marginBottom: 5,
     letterSpacing: 0.3,
   },
   bubbleText: { fontSize: 14, fontFamily: "PlusJakartaSans_500Medium", color: "#FFF", lineHeight: 20 },
@@ -444,7 +459,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  toneEmoji: { fontSize: 16 },
   toneBadgeLabel: {
     fontSize: 8,
     fontFamily: "PlusJakartaSans_800ExtraBold",
@@ -468,6 +482,6 @@ const styles = StyleSheet.create({
   doneIcon: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
   doneTitle: { fontSize: 24, fontFamily: "PlusJakartaSans_800ExtraBold" },
   doneSub: { fontSize: 14, fontFamily: "PlusJakartaSans_500Medium", textAlign: "center" },
-  doneBtn: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 16, marginTop: 8 },
+  doneBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 28, paddingVertical: 14, borderRadius: 16, marginTop: 8 },
   doneBtnText: { color: "#FFF", fontSize: 15, fontFamily: "PlusJakartaSans_700Bold" },
 });
