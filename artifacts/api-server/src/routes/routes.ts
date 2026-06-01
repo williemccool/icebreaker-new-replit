@@ -10,21 +10,26 @@ import type { Express, Request, Response, NextFunction } from "express";
     reports, blocks, paymentOrders,
     insertReportSchema, insertBlockSchema
   } from "@workspace/db";
-  import { getPackById, pickOtherTone, pickPackForMatch } from "../icebreakerPacks";
+  import { getPackById, pickOtherTone, pickPackForMatch, turnOptions, TOTAL_TURNS, type Tone } from "../icebreakerPacks";
+  import {
+    onProfileCompleted, onPhotoUploaded, onCheckIn, onFirstLike,
+    onMatchCreated, onMessageSent, onRoomJoined, onGiftRedeemed,
+  } from "../services/gamification";
   import { eq, and, or, desc, sql, gte, lte, lt, isNull, ne, notInArray, inArray } from "drizzle-orm";
   import bcrypt from "bcryptjs";
   import jwt from "jsonwebtoken";
   import { nanoid } from "nanoid";
   import crypto from "crypto";
-  import path from "path";
-  import fs from "fs";
   import multer from "multer";
   import rateLimit, { ipKeyGenerator } from "express-rate-limit";
   import { z } from "zod";
+  import { socketCorsOrigin } from "../lib/cors";
+  import { getPhotoStorage } from "../services/storage";
 
   // ============ DEMO CONSTANTS ============
-  // Demo credentials must KEEP working in both dev and prod for client showcases.
-  // This is the ONLY hardcoded credential and it is scoped to a single known phone.
+  // Demo credentials are scoped to a single known phone. They are gated behind
+  // ENABLE_DEMO_AUTH so they can power client showcases without shipping an OTP
+  // bypass to real production by default.
   export const DEMO_PHONE = "8095411567";
   export const DEMO_OTP = "123456";
 
@@ -34,6 +39,21 @@ import type { Express, Request, Response, NextFunction } from "express";
     throw new Error("JWT_SECRET environment variable must be set in production.");
   }
   const JWT_SECRET = process.env.JWT_SECRET || "dev-only-change-me-not-for-production";
+  // Access tokens expire so a leaked token isn't valid forever. No refresh flow
+  // yet, so 7d balances security with not logging users out mid-session.
+  const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+  function signToken(userId: number): string {
+    return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions);
+  }
+
+  // Demo auth (OTP bypass for DEMO_PHONE): on by default in dev, OFF by default
+  // in production unless ENABLE_DEMO_AUTH=true is explicitly set.
+  const DEMO_AUTH_ENABLED = IS_PROD
+    ? process.env.ENABLE_DEMO_AUTH === "true"
+    : process.env.ENABLE_DEMO_AUTH !== "false";
+  if (DEMO_AUTH_ENABLED) {
+    console.warn(`[auth] DEMO AUTH ENABLED — phone ${DEMO_PHONE} bypasses OTP. Set ENABLE_DEMO_AUTH=false to disable.`);
+  }
 
   // ============ Razorpay (lazy) ============
   let razorpayClient: any = null;
@@ -126,16 +146,11 @@ import type { Express, Request, Response, NextFunction } from "express";
   });
 
   // ============ Multer (photo uploads) ============
-  const UPLOAD_DIR = path.join(process.cwd(), "uploads");
-  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  // Files are buffered in memory and then handed to the configured storage
+  // provider (local disk in dev, S3-compatible object storage in prod), so the
+  // route never assumes the local filesystem is the source of truth.
   const upload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-      filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase().slice(0, 6) || ".jpg";
-        cb(null, `${nanoid(16)}${ext}`);
-      },
-    }),
+    storage: multer.memoryStorage(),
     limits: { fileSize: 8 * 1024 * 1024, files: 6 },
     fileFilter: (_req, file, cb) => {
       const ok = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(file.mimetype);
@@ -283,7 +298,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     const httpServer = createServer(app);
     const io = new SocketServer(httpServer, {
       cors: {
-        origin: "*",
+        origin: socketCorsOrigin,
         methods: ["GET", "POST"]
       }
     });
@@ -333,6 +348,9 @@ import type { Express, Request, Response, NextFunction } from "express";
             .set({ leftAt: new Date() })
             .where(and(eq(roomPresence.roomId, roomId), eq(roomPresence.userId, authedUserId), isNull(roomPresence.leftAt)));
           await db.insert(roomPresence).values({ roomId, userId: authedUserId, joinedAt: new Date() });
+
+          // Gamification: reward joining a live room.
+          await onRoomJoined(authedUserId).catch(() => {});
 
           // Look up user for the activity event
           const [u] = await db.select({ id: users.id, name: users.name, photos: users.photos })
@@ -405,6 +423,25 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (!authedUserId || typeof roomId !== "number") return;
         socket.to(`room:${roomId}`).emit("room:typing", { userId: authedUserId });
       });
+
+      // Join a 1:1 match room so both participants receive live "message:received"
+      // broadcasts. Membership is verified against the JWT identity.
+      socket.on("match:join", async ({ matchId }: { matchId: number }) => {
+        try {
+          if (!authedUserId || typeof matchId !== "number") return;
+          const [m] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
+          if (!m || (m.userAId !== authedUserId && m.userBId !== authedUserId)) return;
+          socket.join(`match:${matchId}`);
+        } catch { /* swallow */ }
+      });
+      socket.on("match:leave", ({ matchId }: { matchId: number }) => {
+        if (typeof matchId === "number") socket.leave(`match:${matchId}`);
+      });
+      // Typing indicator inside a 1:1 chat.
+      socket.on("match:typing", ({ matchId }: { matchId: number }) => {
+        if (!authedUserId || typeof matchId !== "number") return;
+        socket.to(`match:${matchId}`).emit("match:typing", { matchId, userId: authedUserId });
+      });
       
       // Authenticated chat send. Sender identity comes from the socket's JWT, not
       // from the client payload. Membership and icebreaker gate are enforced.
@@ -427,6 +464,8 @@ import type { Express, Request, Response, NextFunction } from "express";
             body,
             meta: {},
           }).returning();
+
+          await onMessageSent(authedUserId).catch(() => {});
 
           io.to(`match:${matchId}`).emit("message:received", message);
         } catch {
@@ -456,7 +495,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         const { phone } = parsed.data;
 
         // Demo phone: do NOT call SMS provider — code is fixed and known to demo audience.
-        if (phone === DEMO_PHONE) {
+        if (DEMO_AUTH_ENABLED && phone === DEMO_PHONE) {
           res.json({ success: true, message: "Demo phone — use code 123456", demo: true }); return;
         }
 
@@ -498,7 +537,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         // Whitelisted demo bypass: ONLY for the known demo phone, in any environment,
         // and only when the canonical demo OTP is presented. This is intentional and
         // documented so client showcases keep working in production.
-        const demoBypass = phone === DEMO_PHONE && otp === DEMO_OTP;
+        const demoBypass = DEMO_AUTH_ENABLED && phone === DEMO_PHONE && otp === DEMO_OTP;
 
         if (!demoBypass) {
           [verification] = await db.select().from(otpVerifications)
@@ -566,7 +605,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           user = { ...user, isBot: false };
         }
         
-        const token = jwt.sign({ userId: user.id }, JWT_SECRET);
+        const token = signToken(user.id);
         
         res.json({ 
           success: true, 
@@ -668,7 +707,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           }
         }
 
-        const token = jwt.sign({ userId: user.id }, JWT_SECRET);
+        const token = signToken(user.id);
         res.json({ success: true, token, user, isNewUser });
       } catch (error: any) {
         console.error("[clerk-exchange] error:", error);
@@ -1073,8 +1112,11 @@ import type { Express, Request, Response, NextFunction } from "express";
       }
     });
 
-    // Update user profile
-    app.put("/api/user/profile", authMiddleware, async (req: any, res) => {
+    // Shared profile upsert handler. Wired to BOTH POST and PUT /api/user/profile
+    // so the mobile onboarding screen (POST) and any profile-edit screen (PUT)
+    // hit the same validated code path. The user row always exists by this point
+    // (created at auth), so this is an update of the logged-in user's own row.
+    async function handleProfileUpsert(req: any, res: any) {
       try {
         const body = req.body || {};
         // Whitelist mutable profile fields — prevent privilege escalation via
@@ -1109,11 +1151,19 @@ import type { Express, Request, Response, NextFunction } from "express";
           .where(eq(users.id, req.userId))
           .returning();
 
+        // Award the "profile completed" milestone once name + dob + gender are set.
+        if (updated?.name && updated?.dob && updated?.gender) {
+          await onProfileCompleted(req.userId).catch(() => {});
+        }
+
         res.json(updated);
       } catch (error: any) {
         res.status(500).json({ error: error.message });
       }
-    });
+    }
+    // Update user profile — POST (onboarding) and PUT (edit) share one handler.
+    app.post("/api/user/profile", authMiddleware, handleProfileUpsert);
+    app.put("/api/user/profile", authMiddleware, handleProfileUpsert);
     
     // Verify selfie (front-camera capture). Stores a hash, marks user verified,
     // and grants the verification reward (50 XP + 1 Cube) on first success.
@@ -1298,11 +1348,9 @@ import type { Express, Request, Response, NextFunction } from "express";
           meta: { checkInId: checkIn.id, reason: "venue_checkin" }
         });
         
-        // Update XP
-        await db.update(users)
-          .set({ xp: sql`xp + ${xpEarned}` })
-          .where(eq(users.id, req.userId));
-        
+        // Award XP via gamification (recomputes level, leaderboard, quests, badges).
+        await onCheckIn(req.userId, xpEarned).catch(() => {});
+
         res.json({ success: true, checkIn, cubesEarned, xpEarned });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -1368,10 +1416,13 @@ import type { Express, Request, Response, NextFunction } from "express";
           swipedId,
           liked
         });
-        
+
         if (!liked) {
           res.json({ matched: false }); return;
         }
+
+        // Gamification: reward likes (first-like milestone + quest progress).
+        await onFirstLike(req.userId).catch(() => {});
         
         // Check if other user liked back
         const [reciprocalSwipe] = await db.select().from(swipes)
@@ -1402,12 +1453,18 @@ import type { Express, Request, Response, NextFunction } from "express";
           // Award cubes for matching
           const cubesEarned = 5;
           await db.update(cubeWallets)
-            .set({ 
+            .set({
               balance: sql`balance + ${cubesEarned}`,
               totalEarned: sql`total_earned + ${cubesEarned}`
             })
             .where(eq(cubeWallets.userId, req.userId));
-          
+
+          // Gamification: both sides progress on the "match" milestone/quest.
+          await Promise.all([
+            onMatchCreated(req.userId).catch(() => {}),
+            onMatchCreated(swipedId).catch(() => {}),
+          ]);
+
           res.json({ matched: true, match }); return;
         }
         
@@ -1443,24 +1500,26 @@ import type { Express, Request, Response, NextFunction } from "express";
         .sort((a, b) => ((a.meta as any).turn || 0) - ((b.meta as any).turn || 0));
     }
 
-    // Resolve the canonical message body for a given turn + tone path.
-    function resolveTurnBody(pack: any, turn: number, tones: { t1?: string; t2?: string; t3?: string }) {
-      if (turn === 1) return pack.turn1_options[tones.t1!];
-      if (turn === 2) return pack.turn2_options[tones.t1!][tones.t2!];
-      return pack.turn3_options[tones.t2!][tones.t3!];
+    // Resolve the canonical message body for a given turn, using the committed
+    // tone path. `tones` is 0-indexed (tones[0] = turn-1 tone …).
+    function resolveTurnBody(pack: any, turn: number, tones: (Tone | undefined)[]): string {
+      const opts = turnOptions(pack, turn, tones);
+      const tone = tones[turn - 1];
+      return opts && tone ? opts[tone] : "";
     }
 
-    // Who is responsible for a given turn? Turn 1 & 3 = initiator, Turn 2 = the other user.
+    // Who plays a given turn? Initiator plays the odd turns (1/3/5), the other
+    // user plays the even turns (2/4/6) — three messages each across 6 turns.
     function playerForTurn(turn: number, initiatorId: number | null, userAId: number, userBId: number): number | null {
-      if (initiatorId == null) return turn === 1 ? null : null;
-      if (turn === 1 || turn === 3) return initiatorId;
+      if (initiatorId == null) return null;
+      if (turn % 2 === 1) return initiatorId;
       return initiatorId === userAId ? userBId : userAId;
     }
 
     // Build the public state object the clients render from.
     function buildIcebreakerState(match: any, iceTurns: any[], viewerId: number, packId: string | null, otherUser: any) {
       const initiatorId = iceTurns[0]?.senderId ?? null;
-      const completed = match.icebreakerCompleted || iceTurns.length >= 3;
+      const completed = match.icebreakerCompleted || iceTurns.length >= TOTAL_TURNS;
       const currentTurn = completed ? null : iceTurns.length + 1;
       let currentTurnUserId: number | null = null;
       if (currentTurn != null) {
@@ -1548,7 +1607,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           const allMsgs = await tx.select().from(messages).where(eq(messages.matchId, matchId));
           let iceTurns = extractIcebreakerTurns(allMsgs);
           const nextTurn = iceTurns.length + 1;
-          if (nextTurn > 3) return { code: 409, body: { error: "Icebreaker already completed" } };
+          if (nextTurn > TOTAL_TURNS) return { code: 409, body: { error: "Icebreaker already completed" } };
 
           const initiatorId = iceTurns[0]?.senderId ?? null;
           const expectedPlayer = nextTurn === 1 ? req.userId : playerForTurn(nextTurn, initiatorId, match.userAId, match.userBId);
@@ -1571,14 +1630,9 @@ import type { Express, Request, Response, NextFunction } from "express";
           const pack = getPackById(packId);
           if (!pack) return { code: 400, body: { error: "Unknown packId" } };
 
-          // Track the tone path so far, then add the human's pick for this turn.
-          const tones: { t1?: string; t2?: string; t3?: string } = {
-            t1: iceTurns[0]?.meta?.tone,
-            t2: iceTurns[1]?.meta?.tone,
-          };
-          if (nextTurn === 1) tones.t1 = tone;
-          if (nextTurn === 2) tones.t2 = tone;
-          if (nextTurn === 3) tones.t3 = tone;
+          // Track the committed tone path (0-indexed), then add the human's pick.
+          const tones: (Tone | undefined)[] = iceTurns.map((m: any) => m.meta?.tone as Tone | undefined);
+          tones[nextTurn - 1] = tone;
 
           // Insert the human's turn.
           const humanBody = resolveTurnBody(pack, nextTurn, tones);
@@ -1590,15 +1644,13 @@ import type { Express, Request, Response, NextFunction } from "express";
           // Auto-play any following bot turns until it's a human's turn or we're done.
           let played = nextTurn;
           const finalInitiatorId = initiatorId ?? req.userId; // turn 1 just set the initiator
-          while (played < 3) {
+          while (played < TOTAL_TURNS) {
             const upcoming = played + 1;
             const upcomingPlayer = playerForTurn(upcoming, finalInitiatorId, match.userAId, match.userBId)!;
             if (!(await userIsBot(tx, upcomingPlayer))) break;
-            const botTone = upcoming === 2
-              ? pickOtherTone(String(matchId), 2, tones.t1 as any)
-              : pickOtherTone(String(matchId), 3, tones.t2 as any);
-            if (upcoming === 2) tones.t2 = botTone;
-            if (upcoming === 3) tones.t3 = botTone;
+            // Bot's tone branches off the immediately-preceding turn's tone.
+            const botTone = pickOtherTone(String(matchId), upcoming, (tones[upcoming - 2] || "neutral") as Tone);
+            tones[upcoming - 1] = botTone;
             const botBody = resolveTurnBody(pack, upcoming, tones);
             await tx.insert(messages).values({
               matchId, senderId: upcomingPlayer, body: botBody,
@@ -1607,8 +1659,8 @@ import type { Express, Request, Response, NextFunction } from "express";
             played = upcoming;
           }
 
-          // If all three turns now exist, unlock the chat.
-          if (played >= 3) {
+          // If all six turns now exist, unlock the chat.
+          if (played >= TOTAL_TURNS) {
             await tx.update(matches).set({ icebreakerCompleted: true }).where(eq(matches.id, matchId));
           }
 
@@ -1724,7 +1776,14 @@ import type { Express, Request, Response, NextFunction } from "express";
           body,
           meta: {}
         }).returning();
-        
+
+        await onMessageSent(req.userId).catch(() => {});
+
+        // Broadcast to both participants in the match room so the recipient sees
+        // the message live without polling. (Socket-sent messages emit the same
+        // event; clients dedupe by message id.)
+        io.to(`match:${matchId}`).emit("message:received", message);
+
         res.json(message);
       } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -2179,6 +2238,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           if (existing.redeemedAt) { res.status(409).json({ error: "Already redeemed", redeemedAt: existing.redeemedAt }); return; }
           res.status(410).json({ error: "Voucher expired" }); return;
         }
+        await onGiftRedeemed(req.userId).catch(() => {});
         res.json({ success: true, gift: updated });
       } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -2382,19 +2442,43 @@ import type { Express, Request, Response, NextFunction } from "express";
       contentType: z.enum(["user", "message", "photo", "room"]),
       contentId: z.string().min(1).max(120).optional(),
       reason: z.string().min(3).max(500),
+      description: z.string().max(2000).optional(),
     });
     app.post("/api/reports", reportLimiter, authMiddleware, async (req: any, res) => {
       try {
         const parsed = reportBodySchema.safeParse(req.body || {});
         if (!parsed.success) { res.status(400).json({ error: "Invalid report payload" }); return; }
-        const { reportedUserId, contentType, contentId, reason } = parsed.data;
+        const { reportedUserId, contentType, contentId, reason, description } = parsed.data;
+        // The reports table has no dedicated columns for the content target, so we
+        // persist the full context in `evidence` (jsonb) — nothing is dropped.
         const [row] = await db.insert(reports).values({
           reporterId: req.userId,
           targetUserId: reportedUserId ?? req.userId,
           reason,
+          evidence: [{ contentType, contentId: contentId ?? null, description: description ?? null, at: new Date().toISOString() }],
           status: "pending",
         }).returning();
         res.json({ ok: true, report: row });
+      } catch (e: any) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // Lightweight moderation queue. Restricted to admin user IDs configured via
+    // ADMIN_USER_IDS (comma-separated). Returns pending reports with reporter +
+    // target context so a human can act on them. No admin configured = 403.
+    const ADMIN_IDS = new Set(
+      (process.env.ADMIN_USER_IDS || "").split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)),
+    );
+    app.get("/api/admin/reports", authMiddleware, async (req: any, res) => {
+      try {
+        if (!ADMIN_IDS.has(req.userId)) { res.status(403).json({ error: "Forbidden" }); return; }
+        const status = typeof req.query.status === "string" ? req.query.status : "pending";
+        const rows = await db.select().from(reports)
+          .where(eq(reports.status, status as any))
+          .orderBy(desc(reports.createdAt))
+          .limit(200);
+        res.json({ reports: rows });
       } catch (e: any) {
         res.status(500).json({ error: e.message });
       }
@@ -2437,11 +2521,15 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const files = (req.files as Express.Multer.File[]) || [];
         if (!files.length) { res.status(400).json({ error: "No files uploaded" }); return; }
-        const urls = files.map(f => `/uploads/${path.basename(f.path)}`);
+        const store = getPhotoStorage();
+        const urls = await Promise.all(files.map(f =>
+          store.save({ buffer: f.buffer, originalname: f.originalname, mimetype: f.mimetype })
+        ));
         const [me] = await db.select({ photos: users.photos }).from(users).where(eq(users.id, req.userId)).limit(1);
         const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
         const merged = [...existing, ...urls].slice(0, 6);
         await db.update(users).set({ photos: merged, updatedAt: new Date() }).where(eq(users.id, req.userId));
+        await onPhotoUploaded(req.userId, urls.length).catch(() => {});
         res.json({ ok: true, photos: merged, added: urls });
       } catch (e: any) {
         console.error("[upload] failed:", e?.message || e);
@@ -2457,11 +2545,8 @@ import type { Express, Request, Response, NextFunction } from "express";
         const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
         const next = existing.filter(p => p !== url);
         await db.update(users).set({ photos: next, updatedAt: new Date() }).where(eq(users.id, req.userId));
-        // Best-effort: remove local file if it lives in /uploads
-        if (url.startsWith("/uploads/")) {
-          const localPath = path.join(process.cwd(), url);
-          fs.promises.unlink(localPath).catch(() => {});
-        }
+        // Best-effort: remove the underlying object from whichever provider holds it.
+        await getPhotoStorage().delete(url).catch(() => {});
         res.json({ ok: true, photos: next });
       } catch (e: any) {
         res.status(500).json({ error: e.message });

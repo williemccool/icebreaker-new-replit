@@ -15,21 +15,19 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { setBaseUrl } from "@workspace/api-client-react";
 import { ClerkProvider } from "@clerk/clerk-expo";
+import { API_BASE_URL, CLERK_PUBLISHABLE_KEY } from "@/lib/config";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuthContext } from "@/context/AuthContext";
 
 SplashScreen.preventAutoHideAsync();
 
-const CLERK_KEY =
-  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  (typeof process !== "undefined" && (process as any).env?.VITE_CLERK_PUBLISHABLE_KEY) ||
-  "";
+const CLERK_KEY = CLERK_PUBLISHABLE_KEY;
 
 const queryClient = new QueryClient();
 
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+if (API_BASE_URL) {
+  setBaseUrl(API_BASE_URL);
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {

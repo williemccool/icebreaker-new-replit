@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -15,8 +15,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
+import { useSocket } from "@/hooks/useSocket";
 import { get, post } from "@/lib/api";
 import * as Haptics from "expo-haptics";
 
@@ -55,11 +56,37 @@ export default function RoomScreen() {
   const [leaving, setLeaving] = useState<"left" | "right" | null>(null);
   const [actionsOpen, setActionsOpen] = useState(false);
 
+  const qc = useQueryClient();
+  const socket = useSocket();
+
   const { data, isLoading } = useQuery({
     queryKey: ["room", roomId],
     queryFn: () => get(`/api/rooms/${roomId}`),
     enabled: !!roomId,
   });
+
+  // Live presence: once the user enters the room, join the socket room and
+  // refresh the participant list whenever someone joins/leaves or the live
+  // count changes. Leaves the room on unmount so presence stays accurate.
+  useEffect(() => {
+    if (!socket || !roomId || phase !== "discovery") return;
+    const join = () => socket.emit("room:join", { roomId });
+    join();
+    socket.on("connect", join);
+
+    const refresh = () => qc.invalidateQueries({ queryKey: ["room", roomId] });
+    socket.on("room:user_joined", refresh);
+    socket.on("room:user_left", refresh);
+    socket.on("room:count", refresh);
+
+    return () => {
+      socket.off("connect", join);
+      socket.off("room:user_joined", refresh);
+      socket.off("room:user_left", refresh);
+      socket.off("room:count", refresh);
+      socket.emit("room:leave", { roomId });
+    };
+  }, [socket, roomId, phase, qc]);
 
   const swipeMutation = useMutation({
     mutationFn: ({ swipedId, liked }: { swipedId: number; liked: boolean }) =>

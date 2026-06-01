@@ -1,15 +1,49 @@
-# [Project name]
+# Icebreaker
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Venue-first social/dating app: discover venues, check in, meet checked-in people, join live rooms, match, play a 6-turn icebreaker (three messages each), then chat. Includes a Cubes economy, seasons/quests/badges, drink gifts, date bookings, and safety/reporting. Stack: Expo (mobile) + Express/Socket.IO API + Postgres/Drizzle.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm install` — install workspace deps (pnpm only)
+- `pnpm --filter @workspace/db run push` — apply the DB schema to `DATABASE_URL`
+- `pnpm db:seed` — seed venues/events/season/quests/badges (idempotent; safe to re-run)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/icebreaker-mobile run dev` — run the Expo mobile app
 - `pnpm run typecheck` — full typecheck across all packages
+- `pnpm test` — run unit tests (recursive)
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+
+### First-run on a fresh deploy
+
+```
+pnpm install
+pnpm --filter @workspace/db run push   # create tables (needs DATABASE_URL)
+pnpm db:seed                           # populate venues/season/quests/badges
+pnpm --filter @workspace/api-server run dev
+```
+
+The API server also seeds demo participants and refreshes live rooms on boot
+(`ensureLiveRooms` / `ensureDemoParticipants`), which depend on venues existing —
+so run `pnpm db:seed` before/around first boot.
+
+## Environment variables
+
+API server (`artifacts/api-server`):
+- `DATABASE_URL` (required) — Postgres connection string
+- `JWT_SECRET` (required in production) — token signing secret
+- `JWT_EXPIRES_IN` (optional, default `7d`) — access-token lifetime
+- `ENABLE_DEMO_AUTH` — `true`/`false`. Demo phone OTP bypass. Defaults ON in dev, OFF in production. Logs a warning when enabled.
+- `ALLOWED_ORIGINS` — comma-separated CORS allowlist (Express + Socket.IO). Empty in prod = same-origin only; empty in dev = allow all.
+- `ADMIN_USER_IDS` — comma-separated user IDs allowed to call `GET /api/admin/reports`.
+- `STORAGE_PROVIDER` — `local` (default) or `s3`. Photo storage backend.
+  - local: `PUBLIC_BASE_URL` (optional) to return absolute `/uploads` URLs.
+  - s3: `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` (optional, for R2/GCS/Replit), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL` (optional), `S3_KEY_PREFIX`, `S3_FORCE_PATH_STYLE`. Requires `@aws-sdk/client-s3` installed.
+- Optional integrations: `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`, `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_PHONE_NUMBER`, `CLERK_SECRET_KEY`.
+
+Mobile app (`artifacts/icebreaker-mobile`, see `.env.example`):
+- `EXPO_PUBLIC_API_BASE_URL` — backend base URL. Required for native/EAS builds.
+- `EXPO_PUBLIC_DOMAIN` — Replit preview fallback only (auto-injected by the run command).
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` — optional, enables Clerk sign-in.
 
 ## Stack
 

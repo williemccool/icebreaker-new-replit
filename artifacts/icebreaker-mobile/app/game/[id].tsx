@@ -18,7 +18,9 @@ import {
   TONES,
   TONE_COLOR,
   TONE_LABEL,
+  TOTAL_TURNS,
   getPackById,
+  turnOptions,
   type Tone,
   type Pack,
 } from "@/lib/icebreakerPacks";
@@ -45,16 +47,8 @@ type IceState = {
 // The tone options the current player should choose from, given the path so far.
 function optionsForTurn(pack: Pack | null, turn: number, turns: IceTurn[]): Record<Tone, string> | null {
   if (!pack) return null;
-  if (turn === 1) return pack.turn1_options;
-  if (turn === 2) {
-    const t1 = turns[0]?.tone;
-    return t1 ? pack.turn2_options[t1] : null;
-  }
-  if (turn === 3) {
-    const t2 = turns[1]?.tone;
-    return t2 ? pack.turn3_options[t2] : null;
-  }
-  return null;
+  const tones = turns.map((t) => t.tone) as (Tone | undefined)[];
+  return turnOptions(pack, turn, tones);
 }
 
 export default function GameScreen() {
@@ -157,12 +151,12 @@ export default function GameScreen() {
     );
   }
 
-  const currentTurn = state.currentTurn ?? 3;
+  const currentTurn = state.currentTurn ?? TOTAL_TURNS;
   const lastTone = state.turns[state.turns.length - 1]?.tone;
   const accentTone: Tone = picked || lastTone || "flirty";
   const accent = TONE_COLOR[accentTone];
   const options = optionsForTurn(pack, currentTurn, state.turns);
-  const isFinalTurn = currentTurn === 3;
+  const isFinalTurn = currentTurn === TOTAL_TURNS;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -185,13 +179,13 @@ export default function GameScreen() {
               styles.progressFill,
               {
                 backgroundColor: accent,
-                width: `${((currentTurn - 1) / 2) * 100}%`,
+                width: `${((currentTurn - 1) / (TOTAL_TURNS - 1)) * 100}%`,
               },
             ]}
           />
         </View>
         <View style={styles.progressDots}>
-          {[1, 2, 3].map((n) => {
+          {Array.from({ length: TOTAL_TURNS }, (_, i) => i + 1).map((n) => {
             const done = n < currentTurn;
             const active = n === currentTurn;
             return (
@@ -212,7 +206,7 @@ export default function GameScreen() {
           })}
         </View>
         <Text style={[styles.progressLabel, { color: colors.mutedForeground }]}>
-          Turn {currentTurn} of 3 · {state.yourTurn ? "Your move" : `${otherName}'s move`}
+          Turn {currentTurn} of {TOTAL_TURNS} · {state.yourTurn ? "Your move" : `${otherName}'s move`}
         </Text>
       </View>
 

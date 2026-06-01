@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { get, post } from "@/lib/api";
+import { disconnectSocket } from "@/lib/socket";
+import { getToken, setToken as persistToken, clearToken } from "@/lib/tokenStore";
 
 export type User = {
   id: number;
@@ -46,14 +48,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setAuthTokenGetter(async () => {
-      const t = await AsyncStorage.getItem("token");
-      return t;
+      return await getToken();
     });
   }, []);
 
   useEffect(() => {
     (async () => {
-      const storedToken = await AsyncStorage.getItem("token");
+      const storedToken = await getToken();
       const storedUser = await AsyncStorage.getItem("user");
       if (storedToken) {
         setToken(storedToken);
@@ -69,8 +70,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(u);
             await AsyncStorage.setItem("user", JSON.stringify(u));
           }
-        } catch {
-          // Token may be invalid, but keep it for retry
+        } catch (e: any) {
+          // Token expired or invalid → clear it so the user re-authenticates
+          // cleanly instead of getting stuck with a dead session. Other errors
+          // (offline, server down) keep the token for retry.
+          if (e?.status === 401) {
+            disconnectSocket();
+            await clearToken();
+            await AsyncStorage.removeItem("user");
+            setToken(null);
+            setUser(null);
+          }
         }
       }
       setIsLoading(false);
@@ -81,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data: any = await post("/api/auth/verify-otp", { phone, otp });
       if (data?.token) {
-        await AsyncStorage.setItem("token", data.token);
+        await persistToken(data.token);
         await AsyncStorage.setItem("user", JSON.stringify(data.user));
         setToken(data.token);
         setUser(data.user);
@@ -97,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data: any = await post("/api/auth/clerk-exchange", { sessionToken });
       if (data?.token) {
-        await AsyncStorage.setItem("token", data.token);
+        await persistToken(data.token);
         await AsyncStorage.setItem("user", JSON.stringify(data.user));
         setToken(data.token);
         setUser(data.user);
@@ -123,7 +133,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await AsyncStorage.removeItem("token");
+    disconnectSocket();
+    await clearToken();
     await AsyncStorage.removeItem("user");
     setToken(null);
     setUser(null);

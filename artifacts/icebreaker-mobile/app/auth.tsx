@@ -19,20 +19,71 @@ import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/useColors";
 import { useAuthContext } from "@/context/AuthContext";
 import { post } from "@/lib/api";
+import { HAS_CLERK } from "@/lib/config";
 import { useOAuth, useAuth } from "@clerk/clerk-expo";
 import * as WebBrowser from "expo-web-browser";
 
-const CLERK_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
 WebBrowser.maybeCompleteAuthSession();
+
+// Clerk hooks live ONLY in this component, which is rendered solely when
+// HAS_CLERK is true — i.e. exactly when <ClerkProvider> is mounted in _layout.
+// This keeps Clerk hooks from ever running outside their provider (the cause of
+// "useSignIn can only be used within the ClerkProvider component").
+function GoogleSignInButton() {
+  const colors = useColors();
+  const router = useRouter();
+  const { exchangeClerkToken } = useAuthContext();
+  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const clerkAuth = useAuth();
+  const [loading, setLoading] = useState(false);
+
+  return (
+    <TouchableOpacity
+      style={[styles.ghostButton, { borderColor: colors.secondary + "60" }]}
+      onPress={async () => {
+        try {
+          setLoading(true);
+          const { createdSessionId, setActive } = await startOAuthFlow();
+          if (createdSessionId && setActive) {
+            await setActive({ session: createdSessionId });
+            const jwt = await clerkAuth.getToken();
+            const ok = jwt ? await exchangeClerkToken(jwt) : false;
+            if (ok) {
+              router.replace("/");
+            } else {
+              Alert.alert("Login failed", "Could not exchange Clerk session.");
+            }
+          } else {
+            Alert.alert("Google sign-in", "Sign-in was cancelled or failed.");
+          }
+        } catch (e: any) {
+          Alert.alert("Google sign-in error", e?.message || "Something went wrong");
+        } finally {
+          setLoading(false);
+        }
+      }}
+      disabled={loading}
+      activeOpacity={0.8}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.secondary} />
+      ) : (
+        <>
+          <Feather name="globe" size={18} color={colors.secondary} />
+          <Text style={[styles.ghostButtonText, { color: colors.foreground }]}>
+            Continue with Google
+          </Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+}
 
 export default function AuthScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signIn, exchangeClerkToken } = useAuthContext();
-  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
-  const clerkAuth = useAuth();
+  const { signIn } = useAuthContext();
 
   const [step, setStep] = useState<"welcome" | "phone" | "otp">("welcome");
   const [phone, setPhone] = useState("");
@@ -195,47 +246,7 @@ export default function AuthScreen() {
               <Text style={styles.primaryButtonText}>Continue with phone</Text>
             </TouchableOpacity>
 
-            {!!CLERK_KEY && (
-              <TouchableOpacity
-                style={[styles.ghostButton, { borderColor: colors.secondary + "60" }]}
-                onPress={async () => {
-                  try {
-                    setLoading(true);
-                    const { createdSessionId, setActive } = await startOAuthFlow();
-                    if (createdSessionId && setActive) {
-                      await setActive({ session: createdSessionId });
-                      // Get a JWT from Clerk and exchange it for our backend token
-                      const jwt = await clerkAuth.getToken();
-                      const ok = jwt ? await exchangeClerkToken(jwt) : false;
-                      if (ok) {
-                        router.replace("/");
-                      } else {
-                        Alert.alert("Login failed", "Could not exchange Clerk session.");
-                      }
-                    } else {
-                      Alert.alert("Google sign-in", "Sign-in was cancelled or failed.");
-                    }
-                  } catch (e: any) {
-                    Alert.alert("Google sign-in error", e?.message || "Something went wrong");
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.secondary} />
-                ) : (
-                  <>
-                    <Feather name="globe" size={18} color={colors.secondary} />
-                    <Text style={[styles.ghostButtonText, { color: colors.foreground }]}>
-                      Continue with Google
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
+            {HAS_CLERK && <GoogleSignInButton />}
 
             <Text style={[styles.terms, { color: colors.mutedForeground }]}>
               By continuing you confirm you are 18+ and agree to our Terms, Privacy, and Community Guidelines.

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
 import { useAuthContext } from "@/context/AuthContext";
+import { useSocket } from "@/hooks/useSocket";
 import { get, post } from "@/lib/api";
 import * as Haptics from "expo-haptics";
 
@@ -45,6 +46,32 @@ export default function ChatScreen() {
     mutationFn: (body: string) => post(`/api/matches/${matchId}/messages`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["messages", matchId] }),
   });
+
+  // Live messaging: join the match room and append incoming messages as they
+  // arrive. Dedupe by id so the sender's own broadcast doesn't double up.
+  const socket = useSocket();
+  useEffect(() => {
+    if (!socket || !matchId) return;
+    const join = () => socket.emit("match:join", { matchId });
+    join();
+    socket.on("connect", join);
+
+    const onMessage = (msg: any) => {
+      if (!msg || msg.matchId !== matchId) return;
+      qc.setQueryData(["messages", matchId], (old: any) => {
+        const list = Array.isArray(old) ? old : [];
+        if (list.some((m: any) => m.id === msg.id)) return list;
+        return [...list, msg];
+      });
+    };
+    socket.on("message:received", onMessage);
+
+    return () => {
+      socket.off("connect", join);
+      socket.off("message:received", onMessage);
+      socket.emit("match:leave", { matchId });
+    };
+  }, [socket, matchId, qc]);
 
   const otherUser = matchData?.otherUser;
   const icebreakerCompleted = matchData?.match?.icebreakerCompleted ?? false;

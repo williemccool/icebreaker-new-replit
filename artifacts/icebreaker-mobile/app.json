@@ -14,9 +14,16 @@
       "backgroundColor": "#0A0A0C"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.icebreaker.mobile"
     },
-    "android": {},
+    "android": {
+      "package": "com.icebreaker.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0A0A0C"
+      }
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

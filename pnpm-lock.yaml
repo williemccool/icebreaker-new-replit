@@ -257,6 +257,9 @@ importers:
       thread-stream:
         specifier: 3.1.0
         version: 3.1.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
 
   artifacts/icebreaker:
     dependencies:
@@ -480,6 +483,9 @@ importers:
       expo-secure-store:
         specifier: ^15.0.8
         version: 15.0.8(expo@54.0.34)
+      socket.io-client:
+        specifier: ^4.8.3
+        version: 4.8.3
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2
@@ -839,6 +845,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+      tsx:
+        specifier: 'catalog:'
+        version: 4.21.0
 
   scripts:
     devDependencies:

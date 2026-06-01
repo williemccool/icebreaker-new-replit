@@ -9,9 +9,69 @@ export type Pack = {
   turn1_options: ToneMap;
   turn2_options: Record<Tone, ToneMap>;
   turn3_options: Record<Tone, ToneMap>;
+  // Turns 4-6 continue the exchange so each person sends three messages total.
+  turn4_options?: Record<Tone, ToneMap>;
+  turn5_options?: Record<Tone, ToneMap>;
+  turn6_options?: Record<Tone, ToneMap>;
 };
 
 export const TONES: Tone[] = ["flirty", "subtle", "neutral"];
+
+// 6 alternating turns: initiator plays 1/3/5, the other player plays 2/4/6.
+export const TOTAL_TURNS = 6;
+
+// Shared, venue-agnostic continuation for turns 4-6 (mirrors the server).
+export const CONTINUATION_TURN4: Record<Tone, ToneMap> = {
+  flirty: {
+    flirty: "Bold — I like it. So what's your go-to way to make a regular night actually fun?",
+    subtle: "Okay, you've got my attention. What's something you're weirdly good at?",
+    neutral: "Ha, fair enough. What's been the best part of your week so far?",
+  },
+  subtle: {
+    flirty: "Smooth. Tell me one thing about you nobody here would guess.",
+    subtle: "I'm into the slow lane too. What's been keeping you busy lately?",
+    neutral: "Sounds good. Are you a plan-the-night type or see-where-it-goes?",
+  },
+  neutral: {
+    flirty: "Cute. If tonight had a theme song, what's yours?",
+    subtle: "Noted. What's something you've been meaning to get back into?",
+    neutral: "Cool. Is going out a regular thing for you or a one-off tonight?",
+  },
+};
+export const CONTINUATION_TURN5: Record<Tone, ToneMap> = {
+  flirty: {
+    flirty: "Easy — I peak at karaoke nobody asked for. Your turn: hidden talent, go.",
+    subtle: "Probably overthinking playlists. What's yours, since you started this?",
+    neutral: "Honestly just good food and better company. What's your kind of good night?",
+  },
+  subtle: {
+    flirty: "Lately it's late drives and slightly worse decisions. You in or out on that?",
+    subtle: "Mostly work and the occasional night like this. What about you?",
+    neutral: "A bit of everything. What do you do with an actually free evening?",
+  },
+  neutral: {
+    flirty: "See-where-it-goes, clearly — I'm still here talking to you. Worth it?",
+    subtle: "Trying to get back into reading, badly. Any recs I won't abandon?",
+    neutral: "Usually weekends. You seem like you'd know the good spots — do you?",
+  },
+};
+export const CONTINUATION_TURN6: Record<Tone, ToneMap> = {
+  flirty: {
+    flirty: "Okay, officially intrigued. Let's take this to chat before the night ends.",
+    subtle: "You're fun. Save me finding you later — let's keep this in chat.",
+    neutral: "Worth it. Let's keep talking somewhere quieter — chat's open.",
+  },
+  subtle: {
+    flirty: "I'm in. Tell me the rest over chat?",
+    subtle: "Same energy, honestly. Let's move this to chat and keep going.",
+    neutral: "I'd like that. Let's swap notes properly in the chat.",
+  },
+  neutral: {
+    flirty: "Ha, you're trouble. Come on — chat's unlocked, let's actually talk.",
+    subtle: "I've got a few. Let's trade them in the chat.",
+    neutral: "I do, actually. Let's take it to chat and I'll share.",
+  },
+};
 
 export const TONE_COLOR: Record<Tone, string> = {
   flirty: "#FF1B8D",
@@ -165,6 +225,20 @@ export const PACKS: Pack[] = [
 
 export function getPackById(id: string): Pack | undefined {
   return PACKS.find((p) => p.id === id);
+}
+
+// Which tone options to render for `turn`, given committed tones (0-indexed).
+// Mirrors the server so client previews match server-resolved bodies.
+export function turnOptions(pack: Pack, turn: number, tones: (Tone | undefined)[]): ToneMap | null {
+  switch (turn) {
+    case 1: return pack.turn1_options;
+    case 2: return tones[0] ? pack.turn2_options[tones[0]] : null;
+    case 3: return tones[1] ? pack.turn3_options[tones[1]] : null;
+    case 4: return tones[2] ? (pack.turn4_options ?? CONTINUATION_TURN4)[tones[2]] : null;
+    case 5: return tones[3] ? (pack.turn5_options ?? CONTINUATION_TURN5)[tones[3]] : null;
+    case 6: return tones[4] ? (pack.turn6_options ?? CONTINUATION_TURN6)[tones[4]] : null;
+    default: return null;
+  }
 }
 
 export function pickPackForMatch(matchId: string | number, venueHint?: string): Pack {
