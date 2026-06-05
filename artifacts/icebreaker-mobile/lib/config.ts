@@ -25,6 +25,14 @@ export const CLERK_PUBLISHABLE_KEY: string =
 
 export const HAS_CLERK = CLERK_PUBLISHABLE_KEY.length > 0;
 
+// Public legal URLs shown in Settings. Replace these with your hosted documents
+// before release — Apple and Google both require a reachable Privacy Policy link.
+export const LEGAL_URLS = {
+  terms: process.env.EXPO_PUBLIC_TERMS_URL || "https://icebreaker.example/terms",
+  privacy: process.env.EXPO_PUBLIC_PRIVACY_URL || "https://icebreaker.example/privacy",
+  community: process.env.EXPO_PUBLIC_COMMUNITY_URL || "https://icebreaker.example/community-guidelines",
+};
+
 // Surface a loud, actionable error when nothing is configured. We log rather
 // than throw so the app still renders an error boundary instead of a white
 // screen, but the message makes the misconfiguration obvious in any build.

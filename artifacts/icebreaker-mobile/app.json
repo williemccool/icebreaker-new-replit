@@ -35,7 +35,13 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "color": "#FF1B8D"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

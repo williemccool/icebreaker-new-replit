@@ -6,13 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
 import { useColors } from "@/hooks/useColors";
 import { useAuthContext } from "@/context/AuthContext";
 import * as Haptics from "expo-haptics";
+import { del } from "@/lib/api";
+import { registerPushToken, unregisterPushToken } from "@/lib/push";
+import { LEGAL_URLS } from "@/lib/config";
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -21,11 +26,59 @@ export default function SettingsScreen() {
   const { signOut } = useAuthContext();
   const [notifs, setNotifs] = React.useState(true);
   const [location, setLocation] = React.useState(true);
+  const [deleting, setDeleting] = React.useState(false);
 
   const handleSignOut = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     await signOut();
     router.replace("/auth");
+  };
+
+  const openLegal = (url: string) => {
+    WebBrowser.openBrowserAsync(url).catch(() => {});
+  };
+
+  const toggleNotifs = async (value: boolean) => {
+    setNotifs(value);
+    if (value) {
+      const token = await registerPushToken();
+      if (!token) {
+        // Permission denied or unavailable — reflect reality in the UI.
+        setNotifs(false);
+        Alert.alert(
+          "Notifications unavailable",
+          "Enable notifications for Icebreaker in your device settings to get match and message alerts.",
+        );
+      }
+    } else {
+      await unregisterPushToken();
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete account?",
+      "This permanently deletes your profile, matches, messages, and all your data. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              await del("/api/user/me");
+              await signOut();
+              router.replace("/auth");
+            } catch {
+              setDeleting(false);
+              Alert.alert("Couldn't delete account", "Something went wrong. Please try again.");
+            }
+          },
+        },
+      ],
+    );
   };
 
   const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
@@ -82,7 +135,7 @@ export default function SettingsScreen() {
               <Feather name="bell" size={16} color={colors.mutedForeground} />
             </View>
             <Text style={[styles.rowLabel, { color: colors.foreground }]}>Notifications</Text>
-            <Switch value={notifs} onValueChange={setNotifs} trackColor={{ false: "#252530", true: colors.primary + "60" }} thumbColor={notifs ? colors.primary : "#8A8FA8"} />
+            <Switch value={notifs} onValueChange={toggleNotifs} trackColor={{ false: "#252530", true: colors.primary + "60" }} thumbColor={notifs ? colors.primary : "#8A8FA8"} />
           </View>
           <View style={[styles.row, { borderColor: colors.border }]}>
             <View style={[styles.rowIcon, { backgroundColor: "rgba(255,255,255,0.05)" }]}>
@@ -94,9 +147,9 @@ export default function SettingsScreen() {
         </Section>
 
         <Section title="LEGAL">
-          <Row icon="file-text" label="Terms of Service" />
-          <Row icon="lock" label="Privacy Policy" />
-          <Row icon="users" label="Community Guidelines" />
+          <Row icon="file-text" label="Terms of Service" onPress={() => openLegal(LEGAL_URLS.terms)} />
+          <Row icon="lock" label="Privacy Policy" onPress={() => openLegal(LEGAL_URLS.privacy)} />
+          <Row icon="users" label="Community Guidelines" onPress={() => openLegal(LEGAL_URLS.community)} />
         </Section>
 
         <TouchableOpacity
@@ -107,6 +160,21 @@ export default function SettingsScreen() {
           <Feather name="log-out" size={16} color={colors.destructive} />
           <Text style={[styles.signOutText, { color: colors.destructive }]}>Sign out</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.deleteBtn, { borderColor: colors.destructive + "30" }]}
+          onPress={handleDeleteAccount}
+          disabled={deleting}
+          activeOpacity={0.8}
+        >
+          <Feather name="trash-2" size={16} color={colors.destructive} />
+          <Text style={[styles.deleteText, { color: colors.destructive }]}>
+            {deleting ? "Deleting…" : "Delete account"}
+          </Text>
+        </TouchableOpacity>
+        <Text style={[styles.deleteHint, { color: colors.mutedForeground }]}>
+          Permanently deletes your account and all associated data.
+        </Text>
       </ScrollView>
     </View>
   );
@@ -123,4 +191,7 @@ const styles = StyleSheet.create({
   rowLabel: { flex: 1, fontSize: 14, fontFamily: "PlusJakartaSans_600SemiBold" },
   signOut: { flexDirection: "row", alignItems: "center", gap: 8, padding: 14, borderRadius: 14, borderWidth: 1, marginTop: 8, alignSelf: "center" },
   signOutText: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
+  deleteBtn: { flexDirection: "row", alignItems: "center", gap: 8, padding: 14, borderRadius: 14, borderWidth: 1, marginTop: 16, alignSelf: "center" },
+  deleteText: { fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
+  deleteHint: { fontSize: 11, fontFamily: "PlusJakartaSans_500Medium", textAlign: "center", marginTop: 8 },
 });

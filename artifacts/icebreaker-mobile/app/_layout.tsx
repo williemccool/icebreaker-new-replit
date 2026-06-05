@@ -17,8 +17,10 @@ import { setBaseUrl } from "@workspace/api-client-react";
 import { ClerkProvider } from "@clerk/clerk-expo";
 import { API_BASE_URL, CLERK_PUBLISHABLE_KEY } from "@/lib/config";
 
+import * as Notifications from "expo-notifications";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuthContext } from "@/context/AuthContext";
+import { routeForNotificationData } from "@/lib/push";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -40,6 +42,30 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       router.replace("/auth");
     }
   }, [isLoading, isAuthenticated, pathname]);
+
+  // Deep-link when a push notification is tapped (e.g. a new chat message).
+  // Handles both taps while running and a cold start launched from a tap.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const navigateFrom = (data: unknown) => {
+      const route = routeForNotificationData(data);
+      if (route) router.push(route as any);
+    };
+
+    let handled = false;
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!handled && response) {
+        handled = true;
+        navigateFrom(response.notification.request.content.data);
+      }
+    });
+
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      navigateFrom(response.notification.request.content.data);
+    });
+    return () => sub.remove();
+  }, [isAuthenticated]);
 
   return <>{children}</>;
 }

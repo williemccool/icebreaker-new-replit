@@ -81,7 +81,7 @@ export default function HomeScreen() {
             </View>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={[styles.iconBtn, { borderColor: colors.border }]} onPress={() => {}}>
+            <TouchableOpacity style={[styles.iconBtn, { borderColor: colors.border }]} onPress={() => router.push("/matches")}>
               <Feather name="bell" size={16} color={colors.mutedForeground} />
             </TouchableOpacity>
             <TouchableOpacity

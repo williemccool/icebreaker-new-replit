@@ -8,24 +8,25 @@ Config that's already in place:
 
 Backend now in place (production-hardening pass):
 
-- [x] **Account deletion (backend).** `DELETE /api/user/me` removes the user and all
-      associated data; FK `onDelete: cascade` rules in the schema handle children.
-      _Still needs the mobile "Delete account" button in Settings to call it._
-- [x] **Push notifications (backend).** Device-token table + `POST`/`DELETE
-      /api/me/push-token` endpoints + Expo push helper (`lib/push.ts`); new chat
-      messages push the recipient when they're offline.
-      _Still needs the mobile client (see below)._
+- [x] **Account deletion (full).** `DELETE /api/user/me` (cascade) + mobile
+      "Delete account" flow in Settings with confirmation → sign out.
+- [x] **Push notifications (full).** Backend device-token table + endpoints +
+      Expo push helper; mobile client registers the Expo token on login,
+      unregisters on logout, and deep-links into the chat on tap
+      (`lib/push.ts`, wired in `AuthContext`/`_layout`). Offline recipients get
+      pushed on new messages.
+- [x] **Settings wired.** Notifications toggle now (un)registers push; Legal links
+      open the configured URLs (`LEGAL_URLS` in `lib/config.ts`).
 - [x] **Privacy policy (draft).** See `PRIVACY_POLICY.md` at the repo root. Host it
       at a public URL and link it, then have a lawyer review.
 
 Still required before a public store release:
 
-- [ ] **Mobile push client.** Add `expo-notifications`, request permission, get the
-      Expo push token, and `POST /api/me/push-token` on login (and `DELETE` on
-      logout). Handle notification taps to deep-link into the chat.
-- [ ] **Mobile "Delete account" flow.** Add a confirmation screen in Settings that
-      calls `DELETE /api/user/me`, then clears the local token and signs out.
+- [ ] **Set the EAS `projectId`** (`extra.eas.projectId` in app config) so
+      `getExpoPushTokenAsync` returns real tokens; without it push registration
+      is a no-op. Then test push end-to-end on a physical device.
 - [ ] **Real icon/splash assets.** Currently `icon.png` is reused for icon, splash and adaptive foreground. Produce a proper 1024×1024 icon and a dedicated splash/adaptive foreground.
+- [ ] **Set real legal URLs** via `EXPO_PUBLIC_TERMS_URL` / `EXPO_PUBLIC_PRIVACY_URL` / `EXPO_PUBLIC_COMMUNITY_URL` (defaults point at example.com placeholders).
 - [ ] **Host the privacy policy URL** and link it in both store listings and in-app Settings.
 - [ ] **Data-safety / App Privacy disclosures.** Declare collected data (phone, photos, location, usage). The app uses location (`expo-location`), camera/photos (`expo-image-picker`), phone number, and push tokens.
 - [ ] **App Tracking Transparency** (iOS) if any tracking SDKs are added.

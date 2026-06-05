@@ -4,6 +4,7 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { get, post } from "@/lib/api";
 import { disconnectSocket } from "@/lib/socket";
 import { getToken, setToken as persistToken, clearToken } from "@/lib/tokenStore";
+import { registerPushToken, unregisterPushToken } from "@/lib/push";
 
 export type User = {
   id: number;
@@ -69,6 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (u && u.id) {
             setUser(u);
             await AsyncStorage.setItem("user", JSON.stringify(u));
+            // Returning user with a valid session → (re)register for push.
+            void registerPushToken();
           }
         } catch (e: any) {
           // Token expired or invalid → clear it so the user re-authenticates
@@ -95,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.setItem("user", JSON.stringify(data.user));
         setToken(data.token);
         setUser(data.user);
+        void registerPushToken();
         return true;
       }
       return false;
@@ -111,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.setItem("user", JSON.stringify(data.user));
         setToken(data.token);
         setUser(data.user);
+        void registerPushToken();
         return true;
       }
       return false;
@@ -133,6 +138,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Unregister push BEFORE clearing the auth token (the DELETE call needs it).
+    await unregisterPushToken();
     disconnectSocket();
     await clearToken();
     await AsyncStorage.removeItem("user");

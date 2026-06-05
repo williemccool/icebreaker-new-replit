@@ -10,3 +10,10 @@ export async function post<T = any>(path: string, body?: any): Promise<T> {
     body: body ? JSON.stringify(body) : undefined,
   });
 }
+
+export async function del<T = any>(path: string, body?: any): Promise<T> {
+  return customFetch<T>(path, {
+    method: "DELETE",
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}

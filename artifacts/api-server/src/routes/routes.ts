@@ -478,7 +478,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
           // Push the recipient if they're not currently connected.
           const recipientId = match.userAId === authedUserId ? match.userBId : match.userAId;
-          void notifyOfflineMessage(recipientId, authedUserId, body);
+          void notifyOfflineMessage(recipientId, authedUserId, matchId, body);
         } catch {
           // swallow socket errors
         }
@@ -1044,7 +1044,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     // Best-effort push when a chat message is sent. Skips the notification if the
     // recipient is currently connected (the socket already delivered it live).
     // Never throws — a push failure must not affect message delivery.
-    async function notifyOfflineMessage(recipientId: number, senderId: number, body: string) {
+    async function notifyOfflineMessage(recipientId: number, senderId: number, matchId: number, body: string) {
       try {
         if (activeUsers.has(recipientId)) return;
         const tokens = await db.select({ token: deviceTokens.token })
@@ -1055,7 +1055,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         await sendExpoPush(tokens.map((t) => t.token), {
           title: sender?.name ? `New message from ${sender.name}` : "New message",
           body: body.slice(0, 120),
-          data: { type: "message", senderId },
+          data: { type: "message", senderId, matchId },
         });
       } catch { /* best effort */ }
     }
@@ -1837,7 +1837,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         // Push the recipient if they're not currently connected.
         const recipientId = match.userAId === req.userId ? match.userBId : match.userAId;
-        void notifyOfflineMessage(recipientId, req.userId, body);
+        void notifyOfflineMessage(recipientId, req.userId, matchId, body);
 
         res.json(message);
       } catch (error: any) {
