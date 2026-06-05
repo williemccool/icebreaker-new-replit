@@ -1,13 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
   import { createServer, type Server } from "http";
-  import { Server as SocketServer } from "socket.io";
+  import { Server as SocketServer, type DefaultEventsMap } from "socket.io";
   import { db } from "@workspace/db";
   import { 
     users, otpVerifications, preferences, swipes, matches, messages,
     venues, checkIns, rooms, roomPresence, events, tickets,
     cubeWallets, cubeTransactions, quests, questProgress, seasons,
     leaderboards, subscriptions, drinkGifts, dateBookings, crews, crewMembers, badges, userBadges,
-    reports, blocks, paymentOrders,
+    reports, blocks, paymentOrders, deviceTokens,
     insertReportSchema, insertBlockSchema
   } from "@workspace/db";
   import { getPackById, pickOtherTone, pickPackForMatch, turnOptions, TOTAL_TURNS, type Tone } from "../icebreakerPacks";
@@ -25,6 +25,8 @@ import type { Express, Request, Response, NextFunction } from "express";
   import { z } from "zod";
   import { socketCorsOrigin } from "../lib/cors";
   import { getPhotoStorage } from "../services/storage";
+  import { verifyRazorpaySignature } from "../lib/payments";
+  import { sendExpoPush } from "../lib/push";
 
   // ============ DEMO CONSTANTS ============
   // Demo credentials are scoped to a single known phone. They are gated behind
@@ -154,7 +156,8 @@ import type { Express, Request, Response, NextFunction } from "express";
     limits: { fileSize: 8 * 1024 * 1024, files: 6 },
     fileFilter: (_req, file, cb) => {
       const ok = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(file.mimetype);
-      cb(ok ? null : new Error("Unsupported image type") as any, ok);
+      // @types/multer types the error arg as `null` only; cast is required.
+      cb(ok ? null : (new Error("Unsupported image type") as any), ok);
     },
   });
 
@@ -296,7 +299,10 @@ import type { Express, Request, Response, NextFunction } from "express";
     ensureLiveRooms().then(() => ensureDemoParticipants());
 
     const httpServer = createServer(app);
-    const io = new SocketServer(httpServer, {
+    // Typed socket.data so the authenticated userId is strongly typed everywhere
+    // (no `as any` on every access). Event maps stay default/loose.
+    interface IcebreakerSocketData { userId?: number }
+    const io = new SocketServer<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, IcebreakerSocketData>(httpServer, {
       cors: {
         origin: socketCorsOrigin,
         methods: ["GET", "POST"]
@@ -308,11 +314,11 @@ import type { Express, Request, Response, NextFunction } from "express";
     io.use((socket, next) => {
       try {
         const token =
-          (socket.handshake.auth as any)?.token ||
-          (socket.handshake.headers as any)?.authorization?.replace(/^Bearer\s+/i, "");
+          socket.handshake.auth?.token ||
+          socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "");
         if (!token) return next(new Error("Unauthorized"));
         const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
-        (socket.data as any).userId = decoded.userId;
+        socket.data.userId = decoded.userId;
         next();
       } catch {
         next(new Error("Unauthorized"));
@@ -329,7 +335,7 @@ import type { Express, Request, Response, NextFunction } from "express";
     const ROOM_CHAT_MAX = 50;
 
     io.on("connection", (socket) => {
-      const authedUserId: number | undefined = (socket.data as any)?.userId;
+      const authedUserId: number | undefined = socket.data?.userId;
 
       socket.on("user:online", (userId: number) => {
         const uid = typeof userId === "number" && userId === authedUserId ? userId : authedUserId;
@@ -356,7 +362,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           const [u] = await db.select({ id: users.id, name: users.name, photos: users.photos })
             .from(users).where(eq(users.id, authedUserId)).limit(1);
 
-          io.to(`room:${roomId}`).emit("room:user_joined", { userId: authedUserId, name: u?.name, photo: (u?.photos as any)?.[0] || null });
+          io.to(`room:${roomId}`).emit("room:user_joined", { userId: authedUserId, name: u?.name, photo: (u?.photos as string[] | null)?.[0] || null });
 
           // Live count update
           const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
@@ -414,7 +420,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           hist.push(msg);
           while (hist.length > ROOM_CHAT_MAX) hist.shift();
           roomChatHistory.set(roomId, hist);
-          io.to(`room:${roomId}`).emit("room:message", { ...msg, photo: (u?.photos as any)?.[0] || null });
+          io.to(`room:${roomId}`).emit("room:message", { ...msg, photo: (u?.photos as string[] | null)?.[0] || null });
         } catch { /* swallow */ }
       });
 
@@ -447,10 +453,11 @@ import type { Express, Request, Response, NextFunction } from "express";
       // from the client payload. Membership and icebreaker gate are enforced.
       socket.on("message:send", async (data) => {
         try {
-          const authedUserId: number | undefined = (socket.data as any)?.userId;
+          const authedUserId: number | undefined = socket.data?.userId;
           if (!authedUserId) return;
           const matchId = Number(data?.matchId);
-          const body = typeof data?.body === "string" ? data.body : "";
+          // Cap message length so a single payload can't bloat the DB / be abused.
+          const body = typeof data?.body === "string" ? data.body.trim().slice(0, 2000) : "";
           if (!matchId || !body) return;
 
           const [match] = await db.select().from(matches).where(eq(matches.id, matchId)).limit(1);
@@ -468,6 +475,10 @@ import type { Express, Request, Response, NextFunction } from "express";
           await onMessageSent(authedUserId).catch(() => {});
 
           io.to(`match:${matchId}`).emit("message:received", message);
+
+          // Push the recipient if they're not currently connected.
+          const recipientId = match.userAId === authedUserId ? match.userBId : match.userAId;
+          void notifyOfflineMessage(recipientId, authedUserId, body);
         } catch {
           // swallow socket errors
         }
@@ -737,7 +748,73 @@ import type { Express, Request, Response, NextFunction } from "express";
         res.status(500).json({ error: error.message });
       }
     });
-    
+
+    // Permanently delete the authenticated user's account and all associated data.
+    // Apple and Google both REQUIRE in-app account deletion for apps that offer
+    // account creation. FK onDelete rules (see lib/db schema) cascade-remove the
+    // user's matches, messages, swipes, wallet, transactions, reports, blocks,
+    // gifts, bookings, etc.; nullable references (event host, report reviewer) are
+    // set null so unrelated records survive.
+    app.delete("/api/user/me", authMiddleware, async (req: any, res) => {
+      try {
+        const [existing] = await db.select({ id: users.id, photos: users.photos })
+          .from(users).where(eq(users.id, req.userId)).limit(1);
+        if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+
+        // Best-effort: remove uploaded photos from object storage before the row
+        // is gone. Storage cleanup failure must never block account deletion.
+        try {
+          const photos = Array.isArray(existing.photos) ? (existing.photos as string[]) : [];
+          if (photos.length > 0) {
+            const store = getPhotoStorage();
+            await Promise.all(photos.map((url) => store.delete(url).catch(() => {})));
+          }
+        } catch { /* ignore storage cleanup errors */ }
+
+        await db.delete(users).where(eq(users.id, req.userId));
+        res.json({ ok: true, deleted: true });
+      } catch (error: any) {
+        console.error("[/api/user/me DELETE] failed", error);
+        res.status(500).json({ error: "Failed to delete account" });
+      }
+    });
+
+    // Register an Expo push token for the current device. Idempotent on the
+    // token: re-registering the same token just re-points it at this user.
+    app.post("/api/me/push-token", authMiddleware, async (req: any, res) => {
+      try {
+        const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+        const platform = typeof req.body?.platform === "string" ? req.body.platform.slice(0, 20) : null;
+        if (!token) { res.status(400).json({ error: "token required" }); return; }
+        await db.insert(deviceTokens)
+          .values({ userId: req.userId, token, platform })
+          .onConflictDoUpdate({
+            target: deviceTokens.token,
+            set: { userId: req.userId, platform, updatedAt: new Date() },
+          });
+        res.json({ ok: true });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Unregister a push token (on logout). With no body token, drops all of the
+    // user's tokens.
+    app.delete("/api/me/push-token", authMiddleware, async (req: any, res) => {
+      try {
+        const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+        if (token) {
+          await db.delete(deviceTokens)
+            .where(and(eq(deviceTokens.token, token), eq(deviceTokens.userId, req.userId)));
+        } else {
+          await db.delete(deviceTokens).where(eq(deviceTokens.userId, req.userId));
+        }
+        res.json({ ok: true });
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // Get wallet balance
     app.get("/api/wallet", authMiddleware, async (req: any, res) => {
       try {
@@ -815,7 +892,7 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const { SHOP_CATALOG } = await import("../shop");
         const sku = String(req.body?.sku || "");
-        const item = (SHOP_CATALOG as any)[sku];
+        const item = SHOP_CATALOG[sku];
         if (!item) { res.status(400).json({ error: "Unknown SKU" }); return; }
         const amountInPaise = Number(item.priceInPaise) || 0;
         if (amountInPaise <= 0) { res.status(400).json({ error: "Invalid amount for SKU" }); return; }
@@ -863,13 +940,12 @@ import type { Express, Request, Response, NextFunction } from "express";
         const secret = process.env.RAZORPAY_KEY_SECRET;
         if (!secret) { res.status(503).json({ error: "Razorpay not configured" }); return; }
 
-        const expected = crypto
-          .createHmac("sha256", secret)
-          .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-          .digest("hex");
-        const sigBuf = Buffer.from(razorpay_signature, "utf8");
-        const expBuf = Buffer.from(expected, "utf8");
-        if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+        if (!verifyRazorpaySignature({
+          orderId: razorpay_order_id,
+          paymentId: razorpay_payment_id,
+          signature: razorpay_signature,
+          secret,
+        })) {
           res.status(400).json({ error: "Signature verification failed" }); return;
         }
 
@@ -879,11 +955,15 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (order.userId !== req.userId) { res.status(403).json({ error: "Order does not belong to user" }); return; }
         if (order.status === "paid") { res.json({ ok: true, alreadyGranted: true, sku: order.sku }); return; }
 
-        await grantSkuEntitlement(req.userId, order.sku, { razorpayPaymentId: razorpay_payment_id });
-
-        await db.update(paymentOrders)
-          .set({ status: "paid", razorpayPaymentId: razorpay_payment_id, completedAt: new Date() })
-          .where(eq(paymentOrders.id, order.id));
+        // Atomic: grant entitlement AND flip the order to paid in one transaction.
+        // If either fails, both roll back, so a retried verify re-grants exactly
+        // once (and the status check above makes a successful verify idempotent).
+        await db.transaction(async (tx) => {
+          await grantSkuEntitlement(tx, req.userId, order.sku, { razorpayPaymentId: razorpay_payment_id });
+          await tx.update(paymentOrders)
+            .set({ status: "paid", razorpayPaymentId: razorpay_payment_id, completedAt: new Date() })
+            .where(eq(paymentOrders.id, order.id));
+        });
 
         res.json({ ok: true, sku: order.sku });
       } catch (e: any) {
@@ -892,22 +972,30 @@ import type { Express, Request, Response, NextFunction } from "express";
       }
     });
 
-    // Shared entitlement granter — used by both Razorpay verify and demo fallback
-    async function grantSkuEntitlement(userId: number, sku: string, meta: Record<string, any> = {}) {
+    // Executor type accepted by grantSkuEntitlement — the transaction handle
+    // passed into db.transaction(). Forcing every grant to run inside a caller
+    // transaction keeps the wallet balance, the ledger row, and (for payments)
+    // the order-status flip atomic — so a mid-write failure can't desync them
+    // or allow a replayed verify to double-grant.
+    type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+    // Shared entitlement granter — used by both Razorpay verify and demo fallback.
+    // MUST be called inside a db.transaction(); the caller owns the transaction.
+    async function grantSkuEntitlement(tx: DbTx, userId: number, sku: string, meta: Record<string, any> = {}) {
       const { SHOP_CATALOG } = await import("../shop");
-      const item = (SHOP_CATALOG as any)[sku];
+      const item = SHOP_CATALOG[sku];
       if (!item) throw new Error("Unknown SKU");
 
       if (item.category === "cubes") {
         const total = (item.cubes || 0) + (item.bonusCubes || 0);
-        await db.update(cubeWallets)
+        await tx.update(cubeWallets)
           .set({
             balance: sql`${cubeWallets.balance} + ${total}`,
             totalEarned: sql`${cubeWallets.totalEarned} + ${total}`,
             updatedAt: new Date(),
           })
           .where(eq(cubeWallets.userId, userId));
-        await db.insert(cubeTransactions).values({
+        await tx.insert(cubeTransactions).values({
           userId, kind: "earn", amount: total,
           meta: { reason: "purchase", sku, ...meta },
         });
@@ -916,44 +1004,60 @@ import type { Express, Request, Response, NextFunction } from "express";
 
       if (item.category === "godmode") {
         const days = item.durationDays || 30;
-        const endsAt = await db.transaction(async (tx) => {
-          const [existing] = await tx.select().from(subscriptions)
-            .where(and(
-              eq(subscriptions.userId, userId),
-              eq(subscriptions.status, "active"),
-              gte(subscriptions.endsAt, new Date()),
-            ))
-            .orderBy(desc(subscriptions.endsAt))
-            .limit(1);
-          const startsAt = existing ? new Date(existing.endsAt) : new Date();
-          const newEndsAt = new Date(startsAt.getTime() + days * 24 * 3600 * 1000);
-          await tx.insert(subscriptions).values({
-            userId, plan: sku, startsAt, endsAt: newEndsAt, status: "active",
-          });
-          if (existing) {
-            await tx.execute(sql`UPDATE subscriptions SET status = 'expired' WHERE id = ${existing.id}`);
-          }
-          return newEndsAt;
+        const [existing] = await tx.select().from(subscriptions)
+          .where(and(
+            eq(subscriptions.userId, userId),
+            eq(subscriptions.status, "active"),
+            gte(subscriptions.endsAt, new Date()),
+          ))
+          .orderBy(desc(subscriptions.endsAt))
+          .limit(1);
+        const startsAt = existing ? new Date(existing.endsAt) : new Date();
+        const newEndsAt = new Date(startsAt.getTime() + days * 24 * 3600 * 1000);
+        await tx.insert(subscriptions).values({
+          userId, plan: sku, startsAt, endsAt: newEndsAt, status: "active",
         });
-        return { sku, endsAt };
+        if (existing) {
+          await tx.execute(sql`UPDATE subscriptions SET status = 'expired' WHERE id = ${existing.id}`);
+        }
+        return { sku, endsAt: newEndsAt };
       }
 
       if (item.category === "season") {
         const bonus = 200;
-        await db.update(cubeWallets)
+        await tx.update(cubeWallets)
           .set({
             balance: sql`${cubeWallets.balance} + ${bonus}`,
             totalEarned: sql`${cubeWallets.totalEarned} + ${bonus}`,
             updatedAt: new Date(),
           })
           .where(eq(cubeWallets.userId, userId));
-        await db.insert(cubeTransactions).values({
+        await tx.insert(cubeTransactions).values({
           userId, kind: "earn", amount: bonus,
           meta: { reason: "season_pass", sku, ...meta },
         });
-        return { sku, bonusCubes: bonus };
+        return { sku, cubesAdded: bonus, bonusCubes: bonus };
       }
       throw new Error("Unsupported SKU category");
+    }
+
+    // Best-effort push when a chat message is sent. Skips the notification if the
+    // recipient is currently connected (the socket already delivered it live).
+    // Never throws — a push failure must not affect message delivery.
+    async function notifyOfflineMessage(recipientId: number, senderId: number, body: string) {
+      try {
+        if (activeUsers.has(recipientId)) return;
+        const tokens = await db.select({ token: deviceTokens.token })
+          .from(deviceTokens).where(eq(deviceTokens.userId, recipientId));
+        if (tokens.length === 0) return;
+        const [sender] = await db.select({ name: users.name })
+          .from(users).where(eq(users.id, senderId)).limit(1);
+        await sendExpoPush(tokens.map((t) => t.token), {
+          title: sender?.name ? `New message from ${sender.name}` : "New message",
+          body: body.slice(0, 120),
+          data: { type: "message", senderId },
+        });
+      } catch { /* best effort */ }
     }
 
     // Legacy / fallback purchase endpoint — only allowed for the demo user OR when
@@ -976,66 +1080,11 @@ import type { Express, Request, Response, NextFunction } from "express";
           }
         }
 
-        // CUBES TOP-UP
-        if (item.category === "cubes") {
-          const total = (item.cubes || 0) + (item.bonusCubes || 0);
-          await db.update(cubeWallets)
-            .set({
-              balance: sql`${cubeWallets.balance} + ${total}`,
-              totalEarned: sql`${cubeWallets.totalEarned} + ${total}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(cubeWallets.userId, req.userId));
-          await db.insert(cubeTransactions).values({
-            userId: req.userId, kind: "earn", amount: total,
-            meta: { reason: "purchase", sku, priceInPaise: item.priceInPaise },
-          });
-          res.json({ ok: true, sku, cubesAdded: total }); return;
-        }
-
-        // GOD MODE SUBSCRIPTION (atomic)
-        if (item.category === "godmode") {
-          const days = item.durationDays || 30;
-          const endsAt = await db.transaction(async (tx) => {
-            const [existing] = await tx.select().from(subscriptions)
-              .where(and(
-                eq(subscriptions.userId, req.userId),
-                eq(subscriptions.status, "active"),
-                gte(subscriptions.endsAt, new Date()),
-              ))
-              .orderBy(desc(subscriptions.endsAt))
-              .limit(1);
-            const startsAt = existing ? new Date(existing.endsAt) : new Date();
-            const newEndsAt = new Date(startsAt.getTime() + days * 24 * 3600 * 1000);
-            await tx.insert(subscriptions).values({
-              userId: req.userId, plan: sku, startsAt, endsAt: newEndsAt, status: "active",
-            });
-            if (existing) {
-              await tx.execute(sql`UPDATE subscriptions SET status = 'expired' WHERE id = ${existing.id}`);
-            }
-            return newEndsAt;
-          });
-          res.json({ ok: true, sku, endsAt }); return;
-        }
-
-        // SEASON PASS — grant a chunk of bonus cubes + flag in tx meta
-        if (item.category === "season") {
-          const bonus = 200;
-          await db.update(cubeWallets)
-            .set({
-              balance: sql`${cubeWallets.balance} + ${bonus}`,
-              totalEarned: sql`${cubeWallets.totalEarned} + ${bonus}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(cubeWallets.userId, req.userId));
-          await db.insert(cubeTransactions).values({
-            userId: req.userId, kind: "earn", amount: bonus,
-            meta: { reason: "season_pass", sku, priceInPaise: item.priceInPaise },
-          });
-          res.json({ ok: true, sku, cubesAdded: bonus }); return;
-        }
-
-        res.status(400).json({ error: "Unsupported category" });
+        // Grant the entitlement atomically via the shared granter.
+        const result = await db.transaction((tx) =>
+          grantSkuEntitlement(tx, req.userId, sku, { priceInPaise: item.priceInPaise }),
+        );
+        res.json({ ok: true, ...result });
       } catch (error: any) {
         console.error("[/api/purchase] failed", error);
         res.status(500).json({ error: error.message });
@@ -1762,14 +1811,16 @@ import type { Express, Request, Response, NextFunction } from "express";
           res.status(403).json({ error: "Access denied" }); return;
         }
 
-        const { body } = req.body;
+        // Validate + cap the message body so a single payload can't bloat the DB.
+        const body = typeof req.body?.body === "string" ? req.body.body.trim().slice(0, 2000) : "";
+        if (!body) { res.status(400).json({ error: "Message body required" }); return; }
 
         // Free chat is locked until the icebreaker conversation has been completed via
         // POST /api/matches/:id/icebreaker-conversation. No prefix-based bypass.
         if (!match.icebreakerCompleted) {
           res.status(403).json({ error: "Complete the icebreaker first" }); return;
         }
-        
+
         const [message] = await db.insert(messages).values({
           matchId,
           senderId: req.userId,
@@ -1783,6 +1834,10 @@ import type { Express, Request, Response, NextFunction } from "express";
         // the message live without polling. (Socket-sent messages emit the same
         // event; clients dedupe by message id.)
         io.to(`match:${matchId}`).emit("message:received", message);
+
+        // Push the recipient if they're not currently connected.
+        const recipientId = match.userAId === req.userId ? match.userBId : match.userAId;
+        void notifyOfflineMessage(recipientId, req.userId, body);
 
         res.json(message);
       } catch (error: any) {
@@ -2526,7 +2581,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           store.save({ buffer: f.buffer, originalname: f.originalname, mimetype: f.mimetype })
         ));
         const [me] = await db.select({ photos: users.photos }).from(users).where(eq(users.id, req.userId)).limit(1);
-        const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
+        const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as string[]) : [];
         const merged = [...existing, ...urls].slice(0, 6);
         await db.update(users).set({ photos: merged, updatedAt: new Date() }).where(eq(users.id, req.userId));
         await onPhotoUploaded(req.userId, urls.length).catch(() => {});
@@ -2542,7 +2597,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         const url = String(req.body?.url || "");
         if (!url) { res.status(400).json({ error: "url required" }); return; }
         const [me] = await db.select({ photos: users.photos }).from(users).where(eq(users.id, req.userId)).limit(1);
-        const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as any) : [];
+        const existing: string[] = Array.isArray(me?.photos) ? (me!.photos as string[]) : [];
         const next = existing.filter(p => p !== url);
         await db.update(users).set({ photos: next, updatedAt: new Date() }).where(eq(users.id, req.userId));
         // Best-effort: remove the underlying object from whichever provider holds it.

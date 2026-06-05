@@ -1,6 +1,10 @@
 import app from "./app";
 import { registerRoutes } from "./routes/routes";
 import { logger } from "./lib/logger";
+import { errorHandler, initErrorReporting, installProcessErrorHandlers } from "./lib/errors";
+
+installProcessErrorHandlers();
+void initErrorReporting();
 
 const rawPort = process.env["PORT"];
 
@@ -17,6 +21,9 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const httpServer = registerRoutes(app);
+
+// Must be registered after all routes so it catches errors from them.
+app.use(errorHandler);
 
 httpServer.listen(port, () => {
   logger.info({ port }, "Server listening");

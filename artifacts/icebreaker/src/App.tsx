@@ -200,7 +200,7 @@ function App() {
             <Route path="/gift/:userId" component={GiftDrinkPage} />
             <Route path="/dates/plan/:matchId" component={PlanDatePage} />
             <Route path="/payment" component={PaymentPage} />
-            <Route path="/payment/confirm" component={ConfirmPurchasePage} />
+            <Route path="/payment/confirm"><ConfirmPurchasePage /></Route>
             <Route path="/safety" component={TrustSafetyPage} />
             <Route path="/terms" component={TermsPage} />
             <Route path="/privacy" component={PrivacyPage} />
