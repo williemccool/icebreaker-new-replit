@@ -9,6 +9,27 @@ jobs:
   build:
     name: typecheck + test
     runs-on: ubuntu-latest
+
+    # Real Postgres so the API integration tests run in CI (they self-skip when
+    # no database is reachable, e.g. on a contributor's machine without one).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: icebreaker_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/icebreaker_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,5 +50,8 @@ jobs:
       - name: Typecheck (all packages)
         run: pnpm run typecheck
 
-      - name: Unit tests
+      - name: Apply DB schema (for integration tests)
+        run: pnpm db:push
+
+      - name: Unit + integration tests
         run: pnpm test
