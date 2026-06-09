@@ -15,6 +15,8 @@ export type User = {
   dob?: string;
   gender?: string;
   city?: string;
+  bio?: string;
+  pronouns?: string;
   verified?: boolean;
   level?: number;
   xp?: number;

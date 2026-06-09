@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -18,8 +18,6 @@ import { useAuthContext } from "@/context/AuthContext";
 import { get } from "@/lib/api";
 import * as Haptics from "expo-haptics";
 
-const TABS = ["Dating", "Friends", "Crew", "Events"];
-
 function QuickAction({ icon, label, color, onPress }: { icon: any; label: string; color: string; onPress: () => void }) {
   const colors = useColors();
   return (
@@ -37,7 +35,6 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuthContext();
-  const [activeTab, setActiveTab] = useState("Dating");
 
   const { data: venues, isLoading: vLoading } = useQuery({
     queryKey: ["venues"],
@@ -75,10 +72,7 @@ export default function HomeScreen() {
               style={{ width: 28, height: 28 }}
               resizeMode="contain"
             />
-            <View>
-              <Text style={[styles.headerSub, { color: colors.mutedForeground }]}>TONIGHT IN</Text>
-              <Text style={[styles.headerCity, { color: colors.foreground }]}>Bangalore</Text>
-            </View>
+            <Text style={[styles.headerCity, { color: colors.foreground }]}>Icebreaker</Text>
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity style={[styles.iconBtn, { borderColor: colors.border }]} onPress={() => router.push("/matches")}>
@@ -93,23 +87,9 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
-          {TABS.map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[
-                styles.tabPill,
-                activeTab === tab && { backgroundColor: colors.primary + "25", borderColor: colors.primary + "60" },
-              ]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, { color: activeTab === tab ? colors.primary : colors.mutedForeground }]}>
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* Mode tabs (Dating / Friends / Crew / Events) hidden for launch —
+            only Dating ships in v1. Restore the pill row here when the other
+            modes have real backing features. */}
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]}>
@@ -308,18 +288,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     backgroundColor: "rgba(10,10,12,0.95)",
   },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  headerLogo: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  headerSub: { fontSize: 9, fontFamily: "PlusJakartaSans_800ExtraBold", letterSpacing: 1.5 },
-  headerCity: { fontSize: 14, fontFamily: "PlusJakartaSans_800ExtraBold", marginTop: -2 },
+  headerCity: { fontSize: 16, fontFamily: "PlusJakartaSans_800ExtraBold" },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   iconBtn: { width: 36, height: 36, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   avatarBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   avatarText: { color: "#FFF", fontSize: 14, fontFamily: "PlusJakartaSans_700Bold" },
-  tabRow: { gap: 6, paddingTop: 4 },
-  tabPill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: "transparent" },
-  tabText: { fontSize: 13, fontFamily: "PlusJakartaSans_700Bold" },
   content: { padding: 16, gap: 14 },
   rewardsCard: {
     borderRadius: 18,

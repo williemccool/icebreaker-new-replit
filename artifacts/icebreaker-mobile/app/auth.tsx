@@ -144,17 +144,28 @@ export default function AuthScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Logo */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require("../assets/images/logo.png")}
-            style={{ width: 80, height: 80 }}
-            resizeMode="contain"
-          />
-        </View>
+        {/* Small top logo only on the phone/otp steps; the welcome step shows a
+            big logo lower on the screen, just above the sign-in button. */}
+        {step !== "welcome" && (
+          <View style={styles.logoContainer}>
+            <Image
+              source={require("../assets/images/logo.png")}
+              style={{ width: 80, height: 80 }}
+              resizeMode="contain"
+            />
+          </View>
+        )}
 
         {step === "welcome" && (
           <>
+            {/* flex 3 vs the shared spacer's flex 1 below pushes the logo block
+                into the lower third, just above "Continue with phone". */}
+            <View style={styles.welcomeSpacer} />
+            <Image
+              source={require("../assets/images/logo.png")}
+              style={styles.bigLogo}
+              resizeMode="contain"
+            />
             <Text style={[styles.title, { color: colors.foreground }]}>Icebreaker</Text>
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
               Meet where you go out.
@@ -326,6 +337,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   spacer: { flex: 1 },
+  welcomeSpacer: { flex: 3 },
+  bigLogo: { width: 180, height: 180, marginBottom: 8 },
   primaryButton: {
     width: "100%",
     height: 54,

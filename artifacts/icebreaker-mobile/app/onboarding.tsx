@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -17,23 +17,49 @@ export default function OnboardingScreen() {
   const qc = useQueryClient();
 
   const [name, setName] = useState(user?.name || "");
-  const [bio, setBio] = useState("");
+  // Pre-fill bio from the existing profile — starting empty silently wiped the
+  // user's saved bio on every save.
+  const [bio, setBio] = useState(user?.bio || "");
   const [dob, setDob] = useState(user?.dob ? new Date(user.dob).toISOString().slice(0, 10) : "");
   const [gender, setGender] = useState(user?.gender || "male");
   const [city, setCity] = useState(user?.city || "Bangalore");
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      post("/api/user/profile", {
-        name,
+    mutationFn: () => {
+      // Validate DOB BEFORE building the payload. Previously an invalid date
+      // made `new Date(dob).toISOString()` throw inside mutationFn with no
+      // onError handler — the Save button silently did nothing.
+      let dobIso: string | undefined;
+      if (dob.trim()) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dob.trim())) {
+          throw new Error("Date of birth must be in YYYY-MM-DD format (e.g. 1995-06-15).");
+        }
+        const d = new Date(dob.trim());
+        if (Number.isNaN(d.getTime())) {
+          throw new Error("That date of birth isn't a valid date.");
+        }
+        dobIso = d.toISOString();
+      }
+      if (!name.trim()) {
+        throw new Error("Please enter your name.");
+      }
+      return post("/api/user/profile", {
+        name: name.trim(),
         bio,
-        dob: dob ? new Date(dob).toISOString() : undefined,
+        dob: dobIso,
         gender,
-        city,
-      }),
-    onSuccess: () => {
-      refreshUser();
+        city: city.trim(),
+      });
+    },
+    onSuccess: async () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await refreshUser();
+      qc.invalidateQueries();
       router.back();
+    },
+    onError: (e: any) => {
+      // Surface failures — a silent no-op here is what made saving look broken.
+      Alert.alert("Couldn't save profile", e?.message || "Something went wrong. Please try again.");
     },
   });
 
@@ -47,8 +73,16 @@ export default function OnboardingScreen() {
           <Feather name="arrow-left" size={18} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Edit Profile</Text>
-        <TouchableOpacity onPress={() => saveMutation.mutate()}>
-          <Text style={[styles.saveText, { color: colors.primary }]}>Save</Text>
+        <TouchableOpacity
+          onPress={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          {saveMutation.isPending ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Text style={[styles.saveText, { color: colors.primary }]}>Save</Text>
+          )}
         </TouchableOpacity>
       </View>
 
