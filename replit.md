@@ -33,8 +33,9 @@ API server (`artifacts/api-server`):
 - `JWT_SECRET` (required in production) — token signing secret
 - `JWT_EXPIRES_IN` (optional, default `7d`) — access-token lifetime
 - `ENABLE_DEMO_AUTH` — `true`/`false`. Demo phone OTP bypass. Defaults ON in dev, OFF in production. Logs a warning when enabled.
+- `SEED_DEMO_DATA` — `true`/`false`. Master switch for ALL fabricated content: seed bot profiles, their venue check-ins / room presence, auto-created "live" rooms, bots liking back to form matches, and bots auto-playing the icebreaker. Defaults ON in dev, **OFF in production** (must explicitly set `=true` to enable in prod). **Never enable in production** — showing fake people/matches to real users is a trust/legal/store-rejection risk. Logs a loud warning when enabled.
 - `ALLOWED_ORIGINS` — comma-separated CORS allowlist (Express + Socket.IO). Empty in prod = same-origin only; empty in dev = allow all.
-- `ADMIN_USER_IDS` — comma-separated user IDs allowed to call `GET /api/admin/reports`.
+- `ADMIN_USER_IDS` — comma-separated user IDs with admin access. Gates the moderation queue (`GET /api/admin/reports`) and the venue/room management API (`/api/admin/venues`, `/api/admin/rooms` — create/update/list/delete). Required in production to operate venues and schedule rooms.
 - `STORAGE_PROVIDER` — `local` (default) or `s3`. Photo storage backend.
   - local: `PUBLIC_BASE_URL` (optional) to return absolute `/uploads` URLs.
   - s3: `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` (optional, for R2/GCS/Replit), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_PUBLIC_BASE_URL` (optional), `S3_KEY_PREFIX`, `S3_FORCE_PATH_STYLE`. Requires `@aws-sdk/client-s3` installed.

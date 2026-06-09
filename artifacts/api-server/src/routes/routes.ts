@@ -27,6 +27,7 @@ import type { Express, Request, Response, NextFunction } from "express";
   import { getPhotoStorage } from "../services/storage";
   import { verifyRazorpaySignature } from "../lib/payments";
   import { sendExpoPush } from "../lib/push";
+  import { captureError } from "../lib/errors";
 
   // ============ DEMO CONSTANTS ============
   // Demo credentials are scoped to a single known phone. They are gated behind
@@ -55,6 +56,20 @@ import type { Express, Request, Response, NextFunction } from "express";
     : process.env.ENABLE_DEMO_AUTH !== "false";
   if (DEMO_AUTH_ENABLED) {
     console.warn(`[auth] DEMO AUTH ENABLED — phone ${DEMO_PHONE} bypasses OTP. Set ENABLE_DEMO_AUTH=false to disable.`);
+  }
+
+  // ============ DEMO DATA — fabricated users/rooms/matches ============
+  // Controls ALL fake activity: seed bot profiles, their venue check-ins / room
+  // presence, auto-fabricated "live" rooms, bots liking back to form matches,
+  // and bots auto-playing the icebreaker. This MUST be off in production — a
+  // dating product showing fake people or fake matches to real users is a trust
+  // and app-store/legal problem. On by default in dev, OFF in prod unless
+  // SEED_DEMO_DATA=true is explicitly set.
+  const DEMO_DATA_ENABLED = IS_PROD
+    ? process.env.SEED_DEMO_DATA === "true"
+    : process.env.SEED_DEMO_DATA !== "false";
+  if (DEMO_DATA_ENABLED) {
+    console.warn("[demo] DEMO DATA ENABLED — seeding fake users/rooms and auto-matching bots. Set SEED_DEMO_DATA=false to disable. NEVER enable this in production.");
   }
 
   // ============ Razorpay (lazy) ============
@@ -178,6 +193,32 @@ import type { Express, Request, Response, NextFunction } from "express";
     }
   }
 
+  // Admin allowlist — comma-separated user IDs in ADMIN_USER_IDS. Gates operator
+  // endpoints (venue/room management, moderation queue). If none configured, no
+  // one is an admin (fail closed).
+  const ADMIN_USER_IDS = new Set(
+    (process.env.ADMIN_USER_IDS || "")
+      .split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !Number.isNaN(n)),
+  );
+
+  // Require admin membership. Chain AFTER authMiddleware so req.userId is set.
+  export function requireAdmin(req: any, res: any, next: any) {
+    if (!req.userId || !ADMIN_USER_IDS.has(req.userId)) {
+      res.status(403).json({ error: "Forbidden" }); return;
+    }
+    next();
+  }
+
+  // Log an unexpected server error and return a GENERIC message. Never echo the
+  // raw error (DB/SQL/internal details must not leak to clients). Use in every
+  // route catch-block instead of `res.status(500).json({ error: err.message })`.
+  function serverError(res: any, err: unknown): void {
+    captureError(err);
+    if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
+  }
+
   // Keep Live Rooms actually live. Looks for active rooms with ends_at in the
   // past and rolls them forward to today's nightlife window (5pm → 2am next day).
   // If no rooms exist at all, seeds five defaults across the seed venues.
@@ -253,7 +294,8 @@ import type { Express, Request, Response, NextFunction } from "express";
       for (const seed of SEEDS) {
         const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.phone, seed.phone)).limit(1);
         if (existing) {
-          await db.update(users).set({ photos: seed.photos, verified: true }).where(eq(users.id, existing.id));
+          // isBot stays true: these are fabricated profiles, explicitly flagged.
+          await db.update(users).set({ photos: seed.photos, verified: true, isBot: true }).where(eq(users.id, existing.id));
           seedIds.push(existing.id);
         } else {
           const [created] = await db.insert(users).values({
@@ -265,6 +307,7 @@ import type { Express, Request, Response, NextFunction } from "express";
             dob: seed.dob,
             verified: true,
             photos: seed.photos,
+            isBot: true, // explicit — fabricated demo profile
           }).returning({ id: users.id });
           await db.insert(cubeWallets).values({ userId: created.id, balance: 150 });
           await db.insert(preferences).values({ userId: created.id });
@@ -285,18 +328,66 @@ import type { Express, Request, Response, NextFunction } from "express";
           }
         }
       }
-      console.log(`[demo] Ensured ${seedIds.length} seed participants across ${activeRooms.length} rooms.`);
+
+      // Also check the seed users in at every venue so the demo user sees real
+      // people to swipe on after tapping "Check In Here" (the venue "People here"
+      // tab reads check_ins, not room_presence). Idempotent: skip seeds that
+      // already have an open check-in at a venue.
+      const allVenues = await db.select({ id: venues.id }).from(venues);
+      for (const venue of allVenues) {
+        const open = await db.select({ userId: checkIns.userId })
+          .from(checkIns)
+          .where(and(eq(checkIns.venueId, venue.id), isNull(checkIns.checkedOutAt)));
+        const checkedInIds = new Set(open.map(c => c.userId));
+        for (const uid of seedIds) {
+          if (!checkedInIds.has(uid)) {
+            await db.insert(checkIns).values({ userId: uid, venueId: venue.id });
+          }
+        }
+      }
+
+      // Backfill matches: any like a real user already placed on a seed bot
+      // should become a match (bots always like back). This covers likes made
+      // before the bot-reciprocation logic existed, so the demo user opens the
+      // Matches tab and sees the people they liked. Idempotent.
+      const likesOnSeeds = await db.select({ swiperId: swipes.swiperId, swipedId: swipes.swipedId })
+        .from(swipes)
+        .where(and(eq(swipes.liked, true), inArray(swipes.swipedId, seedIds)));
+      let backfilled = 0;
+      for (const like of likesOnSeeds) {
+        // Don't match a bot with another bot.
+        if (seedIds.includes(like.swiperId)) continue;
+        const [existing] = await db.select({ id: matches.id }).from(matches)
+          .where(or(
+            and(eq(matches.userAId, like.swiperId), eq(matches.userBId, like.swipedId)),
+            and(eq(matches.userAId, like.swipedId), eq(matches.userBId, like.swiperId)),
+          ))
+          .limit(1);
+        if (existing) continue;
+        // Ensure the bot's reciprocal like exists, then create the match.
+        await db.insert(swipes).values({ swiperId: like.swipedId, swipedId: like.swiperId, liked: true })
+          .onConflictDoUpdate({ target: [swipes.swiperId, swipes.swipedId], set: { liked: true } });
+        await db.insert(matches).values({ userAId: like.swiperId, userBId: like.swipedId, status: "matched" });
+        backfilled++;
+      }
+
+      console.log(`[demo] Ensured ${seedIds.length} seed participants across ${activeRooms.length} rooms and ${allVenues.length} venues; backfilled ${backfilled} matches.`);
     } catch (e) {
       console.error("[demo] ensureDemoParticipants failed:", e);
     }
   }
 
   export function registerRoutes(app: Express): Server {
-    // Kick off the live-rooms guard on boot, then re-check every 15 min.
-    ensureLiveRooms();
-    setInterval(ensureLiveRooms, 15 * 60 * 1000);
-    // Seed demo participants once on boot (idempotent).
-    ensureLiveRooms().then(() => ensureDemoParticipants());
+    // Demo-only: fabricate "live" rooms and seed bot participants/matches.
+    // Entirely skipped in production so real users never see fake activity.
+    // Real rooms in production come from venue partners / admin flows, not here.
+    if (DEMO_DATA_ENABLED) {
+      // Kick off the live-rooms guard on boot, then re-check every 15 min.
+      ensureLiveRooms();
+      setInterval(ensureLiveRooms, 15 * 60 * 1000);
+      // Seed demo participants once on boot (idempotent).
+      ensureLiveRooms().then(() => ensureDemoParticipants());
+    }
 
     const httpServer = createServer(app);
     // Typed socket.data so the authenticated userId is strongly typed everywhere
@@ -528,7 +619,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         }
         res.json(response);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -625,7 +716,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           isNewUser
         });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -722,7 +813,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         res.json({ success: true, token, user, isNewUser });
       } catch (error: any) {
         console.error("[clerk-exchange] error:", error);
-        res.status(500).json({ error: error.message || "Clerk exchange failed" });
+        captureError(error); res.status(500).json({ error: "Clerk exchange failed" });
       }
     });
 
@@ -745,7 +836,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json({ user, wallet, preferences: prefs });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -794,7 +885,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           });
         res.json({ ok: true });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -811,7 +902,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         }
         res.json({ ok: true });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -827,7 +918,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         }
         res.json({ wallet });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -840,7 +931,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(20);
         res.json(txns);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -857,7 +948,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(1);
         res.json({ subscription: sub || null });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -880,7 +971,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .where(eq(leaderboards.seasonId, season.id));
         res.json({ rank: Number(count) + 1, score: me.score, total: Number(total), season });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -926,7 +1017,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         });
       } catch (e: any) {
         console.error("[razorpay] create order failed:", e?.message || e);
-        res.status(500).json({ error: e?.message || "Order creation failed" });
+        res.status(500).json({ error: "Order creation failed" });
       }
     });
 
@@ -968,7 +1059,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         res.json({ ok: true, sku: order.sku });
       } catch (e: any) {
         console.error("[razorpay] verify failed:", e?.message || e);
-        res.status(500).json({ error: e?.message || "Verification failed" });
+        res.status(500).json({ error: "Verification failed" });
       }
     });
 
@@ -1060,9 +1151,11 @@ import type { Express, Request, Response, NextFunction } from "express";
       } catch { /* best effort */ }
     }
 
-    // Legacy / fallback purchase endpoint — only allowed for the demo user OR when
-    // Razorpay isn't configured (so dev keeps working). In production with Razorpay
-    // configured, this endpoint refuses non-demo users.
+    // Legacy / fallback purchase endpoint — grants an entitlement WITHOUT taking
+    // payment. It exists only for local/dev testing and the demo showcase account.
+    // It FAILS CLOSED in production: a real user can never get a free grant here,
+    // even if Razorpay env is missing/misconfigured. Real users always pay via
+    // /api/payments/create-order + /api/payments/verify.
     app.post("/api/purchase", purchaseLimiter, authMiddleware, async (req: any, res) => {
       try {
         const { SHOP_CATALOG } = await import("../shop");
@@ -1070,14 +1163,13 @@ import type { Express, Request, Response, NextFunction } from "express";
         const item = SHOP_CATALOG[sku];
         if (!item) { res.status(400).json({ error: "Unknown SKU" }); return; }
 
-        // Guard: if Razorpay IS configured, this fallback path is only allowed
-        // for the demo phone so client showcases still work. Real users must
-        // pay via /api/payments/create-order + /api/payments/verify.
-        if (getRazorpay()) {
-          const [me] = await db.select({ phone: users.phone }).from(users).where(eq(users.id, req.userId)).limit(1);
-          if (me?.phone !== DEMO_PHONE) {
-            res.status(402).json({ error: "Payment required. Use /api/payments/create-order." }); return;
-          }
+        // In production, only the demo showcase account (and only while demo auth
+        // is explicitly enabled) may use the no-payment path. Everyone else, and
+        // any non-prod misuse safeguard, must go through Razorpay.
+        const [me] = await db.select({ phone: users.phone }).from(users).where(eq(users.id, req.userId)).limit(1);
+        const isDemoShowcase = DEMO_AUTH_ENABLED && me?.phone === DEMO_PHONE;
+        if (IS_PROD && !isDemoShowcase) {
+          res.status(402).json({ error: "Payment required. Use /api/payments/create-order." }); return;
         }
 
         // Grant the entitlement atomically via the shared granter.
@@ -1087,7 +1179,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         res.json({ ok: true, ...result });
       } catch (error: any) {
         console.error("[/api/purchase] failed", error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: "Purchase failed" });
       }
     });
 
@@ -1132,7 +1224,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json({ match: { ...match, venueName }, otherUser });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1157,7 +1249,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         }
         res.json({ user });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1207,7 +1299,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json(updated);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     }
     // Update user profile — POST (onboarding) and PUT (edit) share one handler.
@@ -1248,7 +1340,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json({ verified: true, user: updated, rewarded: !wasVerified });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1264,7 +1356,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(updated);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1274,14 +1366,13 @@ import type { Express, Request, Response, NextFunction } from "express";
     app.get("/api/venues", authMiddleware, async (req, res) => {
       try {
         const { city, type } = req.query;
-        
-        let query = db.select().from(venues);
-        
-        if (city) {
-          query = query.where(eq(venues.city, city as string)) as any;
-        }
-        
-        const allVenues = await query;
+
+        // Only surface active venues to users; admins use /api/admin/venues to
+        // see everything. Apply optional city/type filters.
+        const conditions: any[] = [eq(venues.active, true)];
+        if (city) conditions.push(eq(venues.city, city as string));
+        if (type) conditions.push(eq(venues.type, type as string));
+        const allVenues = await db.select().from(venues).where(and(...conditions));
         
         // Get check-in counts
         const venueList = await Promise.all(allVenues.map(async (venue) => {
@@ -1300,7 +1391,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(venueList);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -1336,7 +1427,9 @@ import type { Express, Request, Response, NextFunction } from "express";
         .innerJoin(users, eq(checkIns.userId, users.id))
         .where(and(
           eq(checkIns.venueId, venue.id),
-          isNull(checkIns.checkedOutAt)
+          isNull(checkIns.checkedOutAt),
+          // Don't show the viewer themselves on the swipe/people list.
+          ne(checkIns.userId, (req as any).userId)
         ));
 
         // Deduplicate — keep only the most recent open check-in per user
@@ -1349,7 +1442,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json({ venue, checkedInUsers: uniqueCheckedInUsers });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -1402,7 +1495,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json({ success: true, checkIn, cubesEarned, xpEarned });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -1418,7 +1511,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json({ success: true });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1459,11 +1552,16 @@ import type { Express, Request, Response, NextFunction } from "express";
           res.status(403).json({ error: "User not available" }); return;
         }
 
-        // Record swipe
+        // Record swipe. Re-swiping the same person (e.g. re-entering a room that
+        // re-shows the same people) must not 500 on the unique (swiper, swiped)
+        // index — upsert the latest decision instead.
         await db.insert(swipes).values({
           swiperId: req.userId,
           swipedId,
           liked
+        }).onConflictDoUpdate({
+          target: [swipes.swiperId, swipes.swipedId],
+          set: { liked },
         });
 
         if (!liked) {
@@ -1474,15 +1572,48 @@ import type { Express, Request, Response, NextFunction } from "express";
         await onFirstLike(req.userId).catch(() => {});
         
         // Check if other user liked back
-        const [reciprocalSwipe] = await db.select().from(swipes)
+        let [reciprocalSwipe] = await db.select().from(swipes)
           .where(and(
             eq(swipes.swiperId, swipedId),
             eq(swipes.swipedId, req.userId),
             eq(swipes.liked, true)
           ))
           .limit(1);
-        
+
+        // DEMO ONLY: seed bot profiles never open the app, so they can't like
+        // back on their own. When demo data is enabled, a bot likes back so the
+        // demo account can exercise matching + the icebreaker. This is gated on
+        // DEMO_DATA_ENABLED (not just isBot) so real users in production can
+        // NEVER be auto-matched, even if a stray bot row exists in the DB.
+        if (!reciprocalSwipe && DEMO_DATA_ENABLED) {
+          const [swiped] = await db.select({ isBot: users.isBot }).from(users).where(eq(users.id, swipedId)).limit(1);
+          if (swiped?.isBot) {
+            const [botLike] = await db.insert(swipes).values({
+              swiperId: swipedId,
+              swipedId: req.userId,
+              liked: true,
+            }).onConflictDoUpdate({
+              target: [swipes.swiperId, swipes.swipedId],
+              set: { liked: true },
+            }).returning();
+            reciprocalSwipe = botLike;
+          }
+        }
+
         if (reciprocalSwipe) {
+          // Guard against duplicate matches if the same pair swipes again (e.g.
+          // re-entering a room re-shows the same people). A match is unordered,
+          // so check both (A,B) and (B,A).
+          const [existingMatch] = await db.select().from(matches)
+            .where(or(
+              and(eq(matches.userAId, req.userId), eq(matches.userBId, swipedId)),
+              and(eq(matches.userAId, swipedId), eq(matches.userBId, req.userId)),
+            ))
+            .limit(1);
+          if (existingMatch) {
+            res.json({ matched: true, match: existingMatch }); return;
+          }
+
           // Check if user is checked into a venue to record match location
           const [activeCheckIn] = await db.select().from(checkIns)
             .where(and(
@@ -1519,7 +1650,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json({ matched: false });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -1627,7 +1758,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json(buildIcebreakerState(match, iceTurns, req.userId, packId, otherUser));
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1691,9 +1822,11 @@ import type { Express, Request, Response, NextFunction } from "express";
           });
 
           // Auto-play any following bot turns until it's a human's turn or we're done.
+          // DEMO ONLY: gated on DEMO_DATA_ENABLED so production never auto-plays a
+          // turn on behalf of any account, even if a stray bot row exists.
           let played = nextTurn;
           const finalInitiatorId = initiatorId ?? req.userId; // turn 1 just set the initiator
-          while (played < TOTAL_TURNS) {
+          while (DEMO_DATA_ENABLED && played < TOTAL_TURNS) {
             const upcoming = played + 1;
             const upcomingPlayer = playerForTurn(upcoming, finalInitiatorId, match.userAId, match.userBId)!;
             if (!(await userIsBot(tx, upcomingPlayer))) break;
@@ -1726,7 +1859,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.status(result.code).json(result.body); return;
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1773,7 +1906,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(matchesWithUsers);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -1795,7 +1928,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(msgs);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -1841,7 +1974,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json(message);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1859,7 +1992,9 @@ import type { Express, Request, Response, NextFunction } from "express";
           .where(and(eq(roomPresence.roomId, roomId), isNull(roomPresence.leftAt)));
 
         const blockedIds = await getBlockedUserIds(req.userId);
-        const visibleIds = presences.map(p => p.userId).filter(id => !blockedIds.includes(id));
+        const visibleIds = presences
+          .map(p => p.userId)
+          .filter(id => !blockedIds.includes(id) && id !== req.userId);
 
         const participants = visibleIds.length > 0
           ? await db.select({
@@ -1876,7 +2011,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         const minsLeft = Math.max(0, Math.round((new Date(room.endsAt).getTime() - Date.now()) / 60000));
         res.json({ room, participants, minsLeft, count: visibleIds.length });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -1910,8 +2045,189 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(roomsWithCounts);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
+    });
+
+    // ============ ADMIN — VENUE & ROOM MANAGEMENT ============
+    // Operator endpoints for the launch: create/update/list venues and schedule
+    // live rooms. Admin-only (ADMIN_USER_IDS). Partner-scoped access (a venue
+    // owner managing only their own venues) is a future extension — today this
+    // is a single trusted operator role.
+
+    const venueCreateSchema = z.object({
+      name: z.string().min(1).max(200),
+      type: z.string().min(1).max(50),
+      address: z.string().min(1),
+      area: z.string().min(1).max(100),
+      city: z.string().min(1).max(100),
+      lat: z.number().min(-90).max(90).optional(),
+      lng: z.number().min(-180).max(180).optional(),
+      partner: z.boolean().optional(),
+      perks: z.array(z.string()).optional(),
+      qrScheme: z.string().max(100).optional(),
+      imageUrl: z.string().url().max(2000).optional(),
+      description: z.string().max(2000).optional(),
+      active: z.boolean().optional(),
+    });
+    const venueUpdateSchema = venueCreateSchema.partial();
+
+    // Map a validated payload to DB column values (lat/lng are decimal → string).
+    function venueValues(d: z.infer<typeof venueUpdateSchema>) {
+      const v: Record<string, any> = {};
+      for (const k of ["name","type","address","area","city","partner","perks","qrScheme","imageUrl","description","active"] as const) {
+        if (d[k] !== undefined) v[k] = d[k];
+      }
+      if (d.lat !== undefined) v.lat = String(d.lat);
+      if (d.lng !== undefined) v.lng = String(d.lng);
+      return v;
+    }
+
+    // List ALL venues (incl. inactive) for operators.
+    app.get("/api/admin/venues", authMiddleware, requireAdmin, async (_req, res) => {
+      try {
+        const rows = await db.select().from(venues).orderBy(desc(venues.id));
+        res.json({ venues: rows });
+      } catch (e: any) { serverError(res, e); }
+    });
+
+    app.post("/api/admin/venues", authMiddleware, requireAdmin, async (req, res) => {
+      try {
+        const parsed = venueCreateSchema.safeParse(req.body || {});
+        if (!parsed.success) { res.status(400).json({ error: "Invalid venue", details: parsed.error.flatten() }); return; }
+        const [venue] = await db.insert(venues).values(venueValues(parsed.data) as any).returning();
+        res.status(201).json({ venue });
+      } catch (e: any) { serverError(res, e); }
+    });
+
+    app.patch("/api/admin/venues/:id", authMiddleware, requireAdmin, async (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+        const parsed = venueUpdateSchema.safeParse(req.body || {});
+        if (!parsed.success) { res.status(400).json({ error: "Invalid venue", details: parsed.error.flatten() }); return; }
+        const values = venueValues(parsed.data);
+        if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
+        const [venue] = await db.update(venues).set(values).where(eq(venues.id, id)).returning();
+        if (!venue) { res.status(404).json({ error: "Venue not found" }); return; }
+        res.json({ venue });
+      } catch (e: any) { serverError(res, e); }
+    });
+
+    // Hard-delete a venue. Refuses if anything references it (rooms/check-ins/
+    // events) — deactivate via PATCH {active:false} to preserve history instead.
+    app.delete("/api/admin/venues/:id", authMiddleware, requireAdmin, async (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+        const [{ c: roomCount }] = await db.select({ c: sql<number>`count(*)::int` }).from(rooms).where(eq(rooms.venueId, id));
+        const [{ c: ciCount }] = await db.select({ c: sql<number>`count(*)::int` }).from(checkIns).where(eq(checkIns.venueId, id));
+        const [{ c: evCount }] = await db.select({ c: sql<number>`count(*)::int` }).from(events).where(eq(events.venueId, id));
+        if (roomCount + ciCount + evCount > 0) {
+          res.status(409).json({ error: "Venue has rooms, check-ins or events. Deactivate it (PATCH {active:false}) instead of deleting." }); return;
+        }
+        const [deleted] = await db.delete(venues).where(eq(venues.id, id)).returning();
+        if (!deleted) { res.status(404).json({ error: "Venue not found" }); return; }
+        res.json({ ok: true });
+      } catch (e: any) { serverError(res, e); }
+    });
+
+    // ---- Rooms (scheduled live rooms tied to a venue) ----
+    const roomCreateSchema = z.object({
+      venueId: z.number().int().positive(),
+      name: z.string().min(1).max(200),
+      capacity: z.number().int().min(2).max(1000).optional(),
+      startsAt: z.coerce.date(),
+      endsAt: z.coerce.date(),
+      virtual: z.boolean().optional(),
+      premium: z.boolean().optional(),
+      active: z.boolean().optional(),
+    }).refine((d) => d.endsAt > d.startsAt, { message: "endsAt must be after startsAt", path: ["endsAt"] });
+
+    const roomUpdateSchema = z.object({
+      venueId: z.number().int().positive().optional(),
+      name: z.string().min(1).max(200).optional(),
+      capacity: z.number().int().min(2).max(1000).optional(),
+      startsAt: z.coerce.date().optional(),
+      endsAt: z.coerce.date().optional(),
+      virtual: z.boolean().optional(),
+      premium: z.boolean().optional(),
+      active: z.boolean().optional(),
+    });
+
+    // List ALL rooms (incl. inactive/expired), optionally filtered by venue.
+    app.get("/api/admin/rooms", authMiddleware, requireAdmin, async (req, res) => {
+      try {
+        const venueId = req.query.venueId ? parseInt(req.query.venueId as string) : undefined;
+        const rows = venueId && !Number.isNaN(venueId)
+          ? await db.select().from(rooms).where(eq(rooms.venueId, venueId)).orderBy(desc(rooms.id))
+          : await db.select().from(rooms).orderBy(desc(rooms.id));
+        res.json({ rooms: rows });
+      } catch (e: any) { serverError(res, e); }
+    });
+
+    app.post("/api/admin/rooms", authMiddleware, requireAdmin, async (req, res) => {
+      try {
+        const parsed = roomCreateSchema.safeParse(req.body || {});
+        if (!parsed.success) { res.status(400).json({ error: "Invalid room", details: parsed.error.flatten() }); return; }
+        const d = parsed.data;
+        const [venue] = await db.select({ id: venues.id }).from(venues).where(eq(venues.id, d.venueId)).limit(1);
+        if (!venue) { res.status(400).json({ error: "venueId does not exist" }); return; }
+        const [room] = await db.insert(rooms).values({
+          venueId: d.venueId,
+          name: d.name,
+          capacity: d.capacity ?? 12,
+          startsAt: d.startsAt,
+          endsAt: d.endsAt,
+          virtual: d.virtual ?? true,
+          premium: d.premium ?? false,
+          active: d.active ?? true,
+        }).returning();
+        res.status(201).json({ room });
+      } catch (e: any) { serverError(res, e); }
+    });
+
+    app.patch("/api/admin/rooms/:id", authMiddleware, requireAdmin, async (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+        const parsed = roomUpdateSchema.safeParse(req.body || {});
+        if (!parsed.success) { res.status(400).json({ error: "Invalid room", details: parsed.error.flatten() }); return; }
+        const d = parsed.data;
+        const [current] = await db.select().from(rooms).where(eq(rooms.id, id)).limit(1);
+        if (!current) { res.status(404).json({ error: "Room not found" }); return; }
+        // Validate the resulting time window from new-or-existing values.
+        const startsAt = d.startsAt ?? current.startsAt;
+        const endsAt = d.endsAt ?? current.endsAt;
+        if (endsAt <= startsAt) { res.status(400).json({ error: "endsAt must be after startsAt" }); return; }
+        if (d.venueId !== undefined) {
+          const [venue] = await db.select({ id: venues.id }).from(venues).where(eq(venues.id, d.venueId)).limit(1);
+          if (!venue) { res.status(400).json({ error: "venueId does not exist" }); return; }
+        }
+        const values: Record<string, any> = {};
+        for (const k of ["venueId","name","capacity","startsAt","endsAt","virtual","premium","active"] as const) {
+          if (d[k] !== undefined) values[k] = d[k];
+        }
+        if (Object.keys(values).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
+        const [room] = await db.update(rooms).set(values).where(eq(rooms.id, id)).returning();
+        res.json({ room });
+      } catch (e: any) { serverError(res, e); }
+    });
+
+    // Hard-delete a room (clears ephemeral presence first). To take a room
+    // offline without deleting, PATCH {active:false}.
+    app.delete("/api/admin/rooms/:id", authMiddleware, requireAdmin, async (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        if (Number.isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+        const deleted = await db.transaction(async (tx) => {
+          await tx.delete(roomPresence).where(eq(roomPresence.roomId, id));
+          const [row] = await tx.delete(rooms).where(eq(rooms.id, id)).returning();
+          return row;
+        });
+        if (!deleted) { res.status(404).json({ error: "Room not found" }); return; }
+        res.json({ ok: true });
+      } catch (e: any) { serverError(res, e); }
     });
 
     // ============ EVENTS ROUTES ============
@@ -1927,7 +2243,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(eventList);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -1981,7 +2297,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json({ success: true, ticket });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2000,7 +2316,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(season || null);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -2027,37 +2343,42 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(questsWithProgress);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
     // Get leaderboard
-    app.get("/api/leaderboard", async (req, res) => {
+    app.get("/api/leaderboard", authMiddleware, async (req, res) => {
       try {
         const { city, seasonId } = req.query;
-        
-        let query = db.select({
+
+        // Only expose public profile fields — NEVER the whole users row (which
+        // holds phone, email, dob, password/selfie hashes, clerk id).
+        const conditions: any[] = [];
+        if (city) conditions.push(eq(leaderboards.city, city as string));
+        if (seasonId) conditions.push(eq(leaderboards.seasonId, parseInt(seasonId as string)));
+
+        const results = await db.select({
           leaderboard: leaderboards,
-          user: users
+          user: {
+            id: users.id,
+            name: users.name,
+            city: users.city,
+            photos: users.photos,
+            verified: users.verified,
+            level: users.level,
+            xp: users.xp,
+          },
         })
-        .from(leaderboards)
-        .innerJoin(users, eq(leaderboards.userId, users.id))
-        .orderBy(desc(leaderboards.score))
-        .limit(100);
-        
-        if (city) {
-          query = query.where(eq(leaderboards.city, city as string)) as any;
-        }
-        
-        if (seasonId) {
-          query = query.where(eq(leaderboards.seasonId, parseInt(seasonId as string))) as any;
-        }
-        
-        const results = await query;
-        
+          .from(leaderboards)
+          .innerJoin(users, eq(leaderboards.userId, users.id))
+          .where(conditions.length ? and(...conditions) : undefined)
+          .orderBy(desc(leaderboards.score))
+          .limit(100);
+
         res.json(results);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2182,7 +2503,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           throw innerErr;
         }
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2211,7 +2532,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(50);
         res.json(rows);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2240,7 +2561,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(50);
         res.json(rows);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2261,7 +2582,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (!gift) { res.status(404).json({ error: "Gift not found" }); return; }
         res.json({ success: true, gift });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2296,7 +2617,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         await onGiftRedeemed(req.userId).catch(() => {});
         res.json({ success: true, gift: updated });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2346,7 +2667,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json({ success: true, booking });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2384,7 +2705,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json(list);
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2425,7 +2746,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 
         res.json({ success: true, booking: updated, cubesEarned });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2444,7 +2765,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         await db.delete(dateBookings).where(eq(dateBookings.id, bookingId));
         res.json({ success: true });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2470,7 +2791,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json({ success: true, crew });
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
     
@@ -2487,7 +2808,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         
         res.json(myCrews.map(c => c.crew));
       } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        serverError(res, error);
       }
     });
 
@@ -2515,19 +2836,15 @@ import type { Express, Request, Response, NextFunction } from "express";
         }).returning();
         res.json({ ok: true, report: row });
       } catch (e: any) {
-        res.status(500).json({ error: e.message });
+        serverError(res, e);
       }
     });
 
-    // Lightweight moderation queue. Restricted to admin user IDs configured via
-    // ADMIN_USER_IDS (comma-separated). Returns pending reports with reporter +
-    // target context so a human can act on them. No admin configured = 403.
-    const ADMIN_IDS = new Set(
-      (process.env.ADMIN_USER_IDS || "").split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !Number.isNaN(n)),
-    );
-    app.get("/api/admin/reports", authMiddleware, async (req: any, res) => {
+    // Lightweight moderation queue. Restricted to admins (ADMIN_USER_IDS).
+    // Returns pending reports with reporter + target context for a human to act
+    // on. No admin configured = 403.
+    app.get("/api/admin/reports", authMiddleware, requireAdmin, async (req: any, res) => {
       try {
-        if (!ADMIN_IDS.has(req.userId)) { res.status(403).json({ error: "Forbidden" }); return; }
         const status = typeof req.query.status === "string" ? req.query.status : "pending";
         const rows = await db.select().from(reports)
           .where(eq(reports.status, status as any))
@@ -2535,7 +2852,7 @@ import type { Express, Request, Response, NextFunction } from "express";
           .limit(200);
         res.json({ reports: rows });
       } catch (e: any) {
-        res.status(500).json({ error: e.message });
+        serverError(res, e);
       }
     });
 
@@ -2543,7 +2860,7 @@ import type { Express, Request, Response, NextFunction } from "express";
       try {
         const rows = await db.select().from(blocks).where(eq(blocks.blockerId, req.userId));
         res.json(rows);
-      } catch (e: any) { res.status(500).json({ error: e.message }); }
+      } catch (e: any) { serverError(res, e); }
     });
 
     const blockBodySchema = z.object({ blockedId: z.number().int().positive() });
@@ -2558,7 +2875,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         if (existing) { res.json({ ok: true, block: existing, alreadyBlocked: true }); return; }
         const [row] = await db.insert(blocks).values({ blockerId: req.userId, blockedId }).returning();
         res.json({ ok: true, block: row });
-      } catch (e: any) { res.status(500).json({ error: e.message }); }
+      } catch (e: any) { serverError(res, e); }
     });
 
     app.delete("/api/blocks/:blockedId", authMiddleware, async (req: any, res) => {
@@ -2567,7 +2884,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         await db.delete(blocks)
           .where(and(eq(blocks.blockerId, req.userId), eq(blocks.blockedId, blockedId)));
         res.json({ ok: true });
-      } catch (e: any) { res.status(500).json({ error: e.message }); }
+      } catch (e: any) { serverError(res, e); }
     });
 
     // ============ PHOTO UPLOAD ============
@@ -2588,7 +2905,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         res.json({ ok: true, photos: merged, added: urls });
       } catch (e: any) {
         console.error("[upload] failed:", e?.message || e);
-        res.status(500).json({ error: e.message || "Upload failed" });
+        res.status(500).json({ error: "Upload failed" });
       }
     });
 
@@ -2604,7 +2921,7 @@ import type { Express, Request, Response, NextFunction } from "express";
         await getPhotoStorage().delete(url).catch(() => {});
         res.json({ ok: true, photos: next });
       } catch (e: any) {
-        res.status(500).json({ error: e.message });
+        serverError(res, e);
       }
     });
 
