@@ -29,7 +29,9 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
     interests: jsonb("interests").default([]),
     photos: jsonb("photos").default([]),
     verified: boolean("verified").default(false),
-    isBot: boolean("is_bot").default(true),
+    // Default false: a "bot" is a fabricated demo profile and must be opt-in.
+    // Real users are created with isBot:false explicitly; demo seeds set true.
+    isBot: boolean("is_bot").default(false),
     selfieHash: text("selfie_hash"),
     passwordHash: text("password_hash"),
     swipesUsedToday: integer("swipes_used_today").default(0),
@@ -116,6 +118,8 @@ import { pgTable, text, serial, integer, boolean, timestamp, varchar, jsonb, dec
     city: varchar("city", { length: 100 }).notNull(),
     imageUrl: text("image_url"),
     description: text("description"),
+    // Soft enable/disable: hidden from discovery when false, history preserved.
+    active: boolean("active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow()
   });
 
